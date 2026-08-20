@@ -1,31 +1,35 @@
 (function () {
   "use strict";
 
-  if (
-    !window.supabase ||
-    typeof window.supabase.createClient !== "function"
-  ) {
-    console.error("Supabase library is not loaded.");
+  const SUPABASE_URL = "https://ghgfcqdepmqqplrhncza.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_hFouorpxuecQuk_xkXNwkA_rm6sJDVl";
+
+  if (!window.supabase) {
+    console.error("❌ Supabase library NOT loaded");
+    alert("Supabase library is not loaded.");
     return;
   }
 
-  try {
-    window.tcaSupabase = window.supabase.createClient(
-      "https://ghgfcqdepmqqplrhncza.supabase.co",
-      "sb_publishable_hFouorpxuecQuk_xkXNwkA_rm6sJDVl",
-      {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          storage: window.localStorage
-        }
+  window.tcaSupabase = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+  );
+
+  console.log("✅ Supabase client created");
+
+  window.tcaSupabase.auth.getSession()
+    .then(({ data, error }) => {
+      if (error) {
+        console.error("❌ Supabase Auth Error:", error);
+        alert("Supabase Auth Error: " + error.message);
+        return;
       }
-    );
 
-    console.log("TeraByte Supabase initialized successfully.");
-
-  } catch (error) {
-    console.error("Supabase initialization failed:", error);
-  }
+      console.log("✅ Supabase Auth connected");
+      console.log("Session:", data.session);
+    })
+    .catch(error => {
+      console.error("❌ Connection Error:", error);
+      alert("Connection Error: " + error.message);
+    });
 })();
