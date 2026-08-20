@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TeraByte Computer Academy | Login</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Segoe UI", Arial, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            background-image:
+                linear-gradient(
+                    135deg,
+                    rgba(5, 22, 55, 0.82),
+                    rgba(0, 103, 190, 0.55)
+                ),
+                url("https://t4.ftcdn.net/jpg/04/32/48/21/360_F_432482157_tJE0fTz17LL3sTGVWdKSHsKume7jMd05.jpg");
+
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+
+            padding: 25px;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 1050px;
+            min-height: 620px;
+
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+
+            border-radius: 28px;
+            overflow: hidden;
+
+            box-shadow:
+                0 30px 80px rgba(0, 0, 0, 0.35);
+        }
+
+        /* LEFT SIDE */
+
+        .left-section {
+            position: relative;
+            padding: 55px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(2, 23, 57, 0.82),
+                    rgba(0, 94, 173, 0.55)
+                );
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .brand img {
+            width: 75px;
+            height: 75px;
+            object-fit: contain;
+            background: white;
+            border-radius: 18px;
+            padding: 6px;
+        }
+
+        .brand-text h2 {
+            color: white;
+            font-size: 25px;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-text p {
+            color: #b9e7ff;
+            font-size: 13px;
+            margin-top: 4px;
+            letter-spacing: 2px;
+        }
+
+        .welcome {
+            margin-top: 40px;
+        }
+
+        .welcome h1 {
+            color: white;
+            font-size: 48px;
+            line-height: 1.1;
+            margin-bottom: 20px;
+        }
+
+        .welcome h1 span {
+            color: #21b8ff;
+        }
+
+        .welcome p {
+            max-width: 400px;
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .features {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 35px;
+        }
+
+        .feature {
+            padding: 10px 16px;
+            border-radius: 50px;
+
+            background: rgba(255, 255, 255, 0.10);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+
+            color: white;
+            font-size: 13px;
+        }
+
+        .left-footer {
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 12px;
+        }
+
+        /* RIGHT SIDE */
+
+        .right-section {
+            background: rgba(255, 255, 255, 0.96);
+
+            padding: 55px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .logo-area {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .logo-area img {
+            width: 145px;
+            height: 100px;
+            object-fit: contain;
+        }
+
+        .login-box h2 {
+            color: #0b2855;
+            text-align: center;
+            font-size: 30px;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 35px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            color: #243b64;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            height: 54px;
+
+            padding: 0 48px 0 17px;
+
+            border: 1px solid #d8e0eb;
+            border-radius: 12px;
+
+            outline: none;
+
+            font-size: 15px;
+            color: #1e293b;
+
+            background: #f8fafc;
+
+            transition: 0.25s;
+        }
+
+        .input-wrapper input:focus {
+            border-color: #098be5;
+
+            background: white;
+
+            box-shadow:
+                0 0 0 4px rgba(9, 139, 229, 0.10);
+        }
+
+        .input-wrapper input::placeholder {
+            color: #9aa7b8;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+
+            transform: translateY(-50%);
+
+            border: none;
+            background: none;
+
+            cursor: pointer;
+
+            color: #64748b;
+            font-size: 18px;
+        }
+
+        .options {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            margin: 5px 0 25px;
+
+            font-size: 13px;
+        }
+
+        .remember {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: #64748b;
+        }
+
+        .remember input {
+            accent-color: #078be5;
+        }
+
+        .forgot {
+            color: #078be5;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .forgot:hover {
+            text-decoration: underline;
+        }
+
+        .login-btn {
+            width: 100%;
+            height: 54px;
+
+            border: none;
+            border-radius: 12px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #082d63,
+                    #008fe8
+                );
+
+            color: white;
+
+            font-size: 16px;
+            font-weight: 700;
+
+            cursor: pointer;
+
+            box-shadow:
+                0 10px 25px rgba(0, 121, 214, 0.25);
+
+            transition: 0.25s;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+
+            box-shadow:
+                0 15px 30px rgba(0, 121, 214, 0.35);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+
+            margin: 28px 0;
+
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .academy-name {
+            text-align: center;
+            color: #0b2855;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .error-message {
+            display: none;
+
+            padding: 12px 15px;
+
+            border-radius: 10px;
+
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+
+            color: #be123c;
+
+            font-size: 13px;
+
+            margin-bottom: 18px;
+        }
+
+        .success-message {
+            display: none;
+
+            padding: 12px 15px;
+
+            border-radius: 10px;
+
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+
+            color: #047857;
+
+            font-size: 13px;
+
+            margin-bottom: 18px;
+        }
+
+        /* MOBILE */
+
+        @media (max-width: 800px) {
+
+            body {
+                padding: 15px;
+            }
+
+            .login-container {
+                grid-template-columns: 1fr;
+                min-height: auto;
+            }
+
+            .left-section {
+                display: none;
+            }
+
+            .right-section {
+                padding: 40px 25px;
+                min-height: 600px;
+            }
+
+            .login-box h2 {
+                font-size: 27px;
+            }
+        }
+
+        @media (max-width: 420px) {
+
+            .right-section {
+                padding: 35px 18px;
+            }
+
+            .logo-area img {
+                width: 125px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-container">
+
+        <!-- LEFT SIDE -->
+        <section class="left-section">
+
+            <div>
+
+                <div class="brand">
+
+                    <img src="logo.png" alt="TeraByte Computer Academy Logo">
+
+                    <div class="brand-text">
+                        <h2>TeraByte</h2>
+                        <p>COMPUTER ACADEMY</p>
+                    </div>
+
+                </div>
+
+
+                <div class="welcome">
+
+                    <h1>
+                        Learn.<br>
+                        <span>Grow.</span><br>
+                        Succeed.
+                    </h1>
+
+                    <p>
+                        Welcome to TeraByte Computer Academy.
+                        Access your learning portal and continue
+                        your digital journey.
+                    </p>
+
+
+                    <div class="features">
+
+                        <div class="feature">
+                            💻 Computer Training
+                        </div>
+
+                        <div class="feature">
+                            🚀 Career Skills
+                        </div>
+
+                        <div class="feature">
+                            🎓 Professional Learning
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="left-footer">
+                © 2026 TeraByte Computer Academy. All rights reserved.
+            </div>
+
+        </section>
+
+
+        <!-- RIGHT SIDE -->
+        <section class="right-section">
+
+            <div class="login-box">
+
+                <div class="logo-area">
+
+                    <img
+                        src="logo.png"
+                        alt="TeraByte Computer Academy"
+                    >
+
+                </div>
+
+
+                <h2>Welcome Back!</h2>
+
+                <p class="subtitle">
+                    Sign in to continue to your account
+                </p>
+
+
+                <div id="errorMessage" class="error-message">
+                    Invalid email or password. Please try again.
+                </div>
+
+
+                <div id="successMessage" class="success-message">
+                    Login successful! Welcome to TeraByte Computer Academy.
+                </div>
+
+
+                <form id="loginForm">
+
+                    <!-- EMAIL -->
+
+                    <div class="input-group">
+
+                        <label for="email">
+                            Email Address
+                        </label>
+
+                        <div class="input-wrapper">
+
+                            <input
+                                type="email"
+                                id="email"
+                                placeholder="Enter your email"
+                                autocomplete="username"
+                                required
+                            >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- PASSWORD -->
+
+                    <div class="input-group">
+
+                        <label for="password">
+                            Password
+                        </label>
+
+                        <div class="input-wrapper">
+
+                            <input
+                                type="password"
+                                id="password"
+                                placeholder="Enter your password"
+                                autocomplete="current-password"
+                                required
+                            >
+
+                            <button
+                                type="button"
+                                class="toggle-password"
+                                id="togglePassword"
+                                aria-label="Show password"
+                            >
+                                👁
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="options">
+
+                        <label class="remember">
+
+                            <input
+                                type="checkbox"
+                                id="remember"
+                            >
+
+                            Remember me
+
+                        </label>
+
+
+                        <a
+                            href="#"
+                            class="forgot"
+                            onclick="return false;"
+                        >
+                            Forgot Password?
+                        </a>
+
+                    </div>
+
+
+                    <button
+                        type="submit"
+                        class="login-btn"
+                    >
+                        Sign In
+                    </button>
+
+                </form>
+
+
+                <div class="divider">
+                    <span>SECURE LOGIN</span>
+                </div>
+
+
+                <div class="academy-name">
+                    TERABYTE COMPUTER ACADEMY
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <script>
+
+        /*
+         * DEMO LOGIN CREDENTIALS
+         *
+         * Email:
+         * alpha.dhrubajyoti@gmail.com
+         *
+         * Password:
+         * WB9609022523
+         *
+         * IMPORTANT:
+         * Do NOT use hardcoded credentials for
+         * a real production authentication system.
+         */
+
+        const VALID_EMAIL = "alpha.dhrubajyoti@gmail.com";
+        const VALID_PASSWORD = "WB9609022523";
+
+
+        const loginForm =
+            document.getElementById("loginForm");
+
+        const emailInput =
+            document.getElementById("email");
+
+        const passwordInput =
+            document.getElementById("password");
+
+        const errorMessage =
+            document.getElementById("errorMessage");
+
+        const successMessage =
+            document.getElementById("successMessage");
+
+        const togglePassword =
+            document.getElementById("togglePassword");
+
+
+        /* SHOW / HIDE PASSWORD */
+
+        togglePassword.addEventListener("click", function () {
+
+            if (passwordInput.type === "password") {
+
+                passwordInput.type = "text";
+
+                togglePassword.textContent = "🙈";
+
+            } else {
+
+                passwordInput.type = "password";
+
+                togglePassword.textContent = "👁";
+
+            }
+
+        });
+
+
+        /* LOGIN */
+
+        loginForm.addEventListener("submit", function (event) {
+
+            event.preventDefault();
+
+            const email =
+                emailInput.value.trim();
+
+            const password =
+                passwordInput.value;
+
+
+            errorMessage.style.display = "none";
+            successMessage.style.display = "none";
+
+
+            if (
+                email === VALID_EMAIL &&
+                password === VALID_PASSWORD
+            ) {
+
+                successMessage.style.display = "block";
+
+                /*
+                 * You can redirect the user here.
+                 *
+                 * Example:
+                 *
+                 * window.location.href = "dashboard.html";
+                 */
+
+                setTimeout(function () {
+
+                    window.location.href =
+                        "dashboard.html";
+
+                }, 1200);
+
+            } else {
+
+                errorMessage.style.display = "block";
+
+                passwordInput.value = "";
+
+                passwordInput.focus();
+
+            }
+
+        });
+
+    </script>
+
+</body>
+</html>
