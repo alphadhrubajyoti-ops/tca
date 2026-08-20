@@ -7,5 +7,16 @@ window.TCA_CONFIG = {
     "sb_publishable_hFouorpxuecQuk_xkXNwkA_rm6sJDVl",
 
   STUDENT_EMAIL_DOMAIN:
-    "students.terabyte.academy"
+    "students.terabyte.academy",
+
+  ADMIN_EMAIL_DOMAIN:
+    "admin.terabyte.academy",
+
+  AUTH: {
+    STUDENT_EMAIL_DOMAIN:
+      "students.terabyte.academy",
+
+    ADMIN_EMAIL_DOMAIN:
+      "admin.terabyte.academy"
+  }
 };
