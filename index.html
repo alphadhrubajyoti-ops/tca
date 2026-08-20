@@ -2,11 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
 
   <meta
     name="description"
-    content="TeraByte Computer Academy secure student and administrator portal"
+    content="TeraByte Computer Academy student and administrator portal"
   >
 
   <meta
@@ -21,11 +25,10 @@
       object-src 'none';
       base-uri 'self';
       frame-ancestors 'none';
-    <script src="config.js"></script>
     "
   >
 
-  <title>TeraByte Computer Academy | Secure Login</title>
+  <title>TeraByte Computer Academy</title>
 
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -40,6 +43,7 @@
     <div>
 
       <div class="login-brand">
+
         <img
           src="logo.png"
           alt="TeraByte Computer Academy Logo"
@@ -49,6 +53,7 @@
           <h2>TeraByte</h2>
           <p>COMPUTER ACADEMY</p>
         </div>
+
       </div>
 
       <div class="hero">
@@ -61,8 +66,8 @@
 
         <p>
           A secure digital campus for student records,
-          fees, certificates, announcements, messages
-          and student services.
+          fees, certificates, announcements,
+          messages and student services.
         </p>
 
         <div class="chips">
@@ -137,10 +142,8 @@
       <form
         id="loginForm"
         autocomplete="on"
-        novalidate
       >
 
-        <!-- USERNAME / EMAIL -->
         <div class="login-field">
 
           <label
@@ -162,7 +165,6 @@
         </div>
 
 
-        <!-- PASSWORD -->
         <div class="login-field">
 
           <label for="password">
@@ -185,7 +187,6 @@
               type="button"
               id="showPass"
               aria-label="Show password"
-              aria-pressed="false"
             >
               👁
             </button>
@@ -195,7 +196,6 @@
         </div>
 
 
-        <!-- LOGIN META -->
         <div class="login-meta">
 
           <label>
@@ -213,7 +213,6 @@
         </div>
 
 
-        <!-- SUBMIT -->
         <button
           class="login-submit"
           id="loginButton"
@@ -237,18 +236,16 @@
 </main>
 
 
-<!-- =========================================================
-     JAVASCRIPT
-     IMPORTANT: LOAD IN THIS ORDER
-========================================================= -->
+<!-- =====================================================
+     SUPABASE
+===================================================== -->
 
-<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- Supabase client -->
+<script src="config.js"></script>
+
 <script src="supabase.js"></script>
 
-<!-- Authentication functions -->
 <script src="auth.js"></script>
 
 
@@ -257,46 +254,40 @@
 
 document.addEventListener("DOMContentLoaded", function () {
 
-  const roleButtons = Array.from(
-    document.querySelectorAll(".role")
-  );
+  const roleButtons =
+    Array.from(document.querySelectorAll(".role"));
 
-  const identity = document.getElementById("identity");
-  const identityLabel = document.getElementById("identityLabel");
-  const password = document.getElementById("password");
-  const remember = document.getElementById("remember");
-  const errorBox = document.getElementById("error");
-  const form = document.getElementById("loginForm");
-  const loginButton = document.getElementById("loginButton");
-  const showPass = document.getElementById("showPass");
+  const identity =
+    document.getElementById("identity");
+
+  const identityLabel =
+    document.getElementById("identityLabel");
+
+  const password =
+    document.getElementById("password");
+
+  const remember =
+    document.getElementById("remember");
+
+  const errorBox =
+    document.getElementById("error");
+
+  const form =
+    document.getElementById("loginForm");
+
+  const loginButton =
+    document.getElementById("loginButton");
+
+  const showPass =
+    document.getElementById("showPass");
+
 
   let role = "admin";
 
 
-  /* =========================================================
-     CHECK SUPABASE
-  ========================================================= */
-
-  if (!window.tcaSupabase) {
-
-    errorBox.textContent =
-      "Unable to connect to the authentication server. Please refresh the page.";
-
-    errorBox.style.display = "block";
-
-    loginButton.disabled = true;
-
-    console.error(
-      "tcaSupabase was not initialized."
-    );
-
-    return;
-  }
-
-
-  /* =========================================================
-     SHOW ERROR
-  ========================================================= */
+  /* ==========================================
+     ERROR
+  ========================================== */
 
   function showError(message) {
 
@@ -307,20 +298,17 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
 
-  /* =========================================================
-     HIDE ERROR
-  ========================================================= */
-
   function hideError() {
 
     errorBox.textContent = "";
+
     errorBox.style.display = "none";
   }
 
 
-  /* =========================================================
-     CHANGE ROLE
-  ========================================================= */
+  /* ==========================================
+     ROLE
+  ========================================== */
 
   function setRole(nextRole) {
 
@@ -354,30 +342,26 @@ document.addEventListener("DOMContentLoaded", function () {
       identity.type = "text";
 
       identity.placeholder =
-        "TB20260001";
+        "tb20260001";
+
     }
 
-
-    /* Load saved username/email */
 
     const savedLogin =
       localStorage.getItem("tca_login_id");
 
     if (savedLogin) {
 
-      identity.value = savedLogin;
+      identity.value =
+        savedLogin;
 
-      remember.checked = true;
+      remember.checked =
+        true;
     }
-
 
     hideError();
   }
 
-
-  /* =========================================================
-     ROLE BUTTONS
-  ========================================================= */
 
   roleButtons.forEach(function (button) {
 
@@ -395,9 +379,9 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
 
-  /* =========================================================
-     SHOW / HIDE PASSWORD
-  ========================================================= */
+  /* ==========================================
+     SHOW PASSWORD
+  ========================================== */
 
   showPass.addEventListener(
     "click",
@@ -407,12 +391,9 @@ document.addEventListener("DOMContentLoaded", function () {
         password.type === "text";
 
       password.type =
-        showing ? "password" : "text";
-
-      showPass.setAttribute(
-        "aria-pressed",
-        String(!showing)
-      );
+        showing
+          ? "password"
+          : "text";
 
       showPass.setAttribute(
         "aria-label",
@@ -425,9 +406,9 @@ document.addEventListener("DOMContentLoaded", function () {
   );
 
 
-  /* =========================================================
+  /* ==========================================
      LOGIN
-  ========================================================= */
+  ========================================== */
 
   form.addEventListener(
     "submit",
@@ -444,8 +425,6 @@ document.addEventListener("DOMContentLoaded", function () {
       const loginPassword =
         password.value;
 
-
-      /* Basic validation */
 
       if (!loginId) {
 
@@ -473,8 +452,6 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
 
-      /* Save login ID */
-
       if (remember.checked) {
 
         localStorage.setItem(
@@ -487,10 +464,9 @@ document.addEventListener("DOMContentLoaded", function () {
         localStorage.removeItem(
           "tca_login_id"
         );
+
       }
 
-
-      /* Disable button */
 
       loginButton.disabled = true;
 
@@ -500,9 +476,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
       try {
 
-        /* ===============================================
-           ADMIN / TEACHER LOGIN
-        =============================================== */
+        /* =====================================
+           ADMIN / TEACHER
+        ===================================== */
 
         if (role === "admin") {
 
@@ -514,7 +490,6 @@ document.addEventListener("DOMContentLoaded", function () {
             throw new Error(
               "Administrator authentication is not configured."
             );
-
           }
 
 
@@ -531,9 +506,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
 
-        /* ===============================================
-           STUDENT LOGIN
-        =============================================== */
+        /* =====================================
+           STUDENT
+        ===================================== */
 
         else {
 
@@ -545,7 +520,6 @@ document.addEventListener("DOMContentLoaded", function () {
             throw new Error(
               "Student authentication is not configured."
             );
-
           }
 
 
@@ -561,6 +535,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         }
 
+
       } catch (err) {
 
         console.error(
@@ -572,13 +547,15 @@ document.addEventListener("DOMContentLoaded", function () {
         let message =
           err && err.message
             ? err.message
-            : "Unable to sign in. Please check your credentials.";
+            : "Unable to sign in.";
 
 
-        /* Make common Supabase errors easier to understand */
+        const lower =
+          message.toLowerCase();
+
 
         if (
-          message.toLowerCase().includes(
+          lower.includes(
             "invalid login credentials"
           )
         ) {
@@ -590,22 +567,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
         if (
-          message.toLowerCase().includes(
+          lower.includes(
             "email not confirmed"
           )
         ) {
 
           message =
-            "Your account email has not been confirmed.";
+            "This account has not been confirmed.";
 
         }
 
 
         showError(message);
 
+
       } finally {
 
-        loginButton.disabled = false;
+        loginButton.disabled =
+          false;
 
         loginButton.textContent =
           "Sign In Securely";
@@ -616,9 +595,9 @@ document.addEventListener("DOMContentLoaded", function () {
   );
 
 
-  /* =========================================================
+  /* ==========================================
      INITIALIZE
-  ========================================================= */
+  ========================================== */
 
   setRole("admin");
 
