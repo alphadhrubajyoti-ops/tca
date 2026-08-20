@@ -1,35 +1,41 @@
-(function () {
-  "use strict";
+"use strict";
 
-  const SUPABASE_URL = "https://ghgfcqdepmqqplrhncza.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_hFouorpxuecQuk_xkXNwkA_rm6sJDVl";
+(function () {
 
   if (!window.supabase) {
-    console.error("❌ Supabase library NOT loaded");
-    alert("Supabase library is not loaded.");
+    console.error("Supabase library was not loaded.");
     return;
   }
 
-  window.tcaSupabase = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
-  );
+  if (!window.TCA_CONFIG) {
+    console.error("config.js was not loaded.");
+    return;
+  }
 
-  console.log("✅ Supabase client created");
+  const url = window.TCA_CONFIG.SUPABASE_URL;
+  const key = window.TCA_CONFIG.SUPABASE_ANON_KEY;
 
-  window.tcaSupabase.auth.getSession()
-    .then(({ data, error }) => {
-      if (error) {
-        console.error("❌ Supabase Auth Error:", error);
-        alert("Supabase Auth Error: " + error.message);
-        return;
-      }
+  if (!url || !key) {
+    console.error("Supabase configuration is missing.");
+    return;
+  }
 
-      console.log("✅ Supabase Auth connected");
-      console.log("Session:", data.session);
-    })
-    .catch(error => {
-      console.error("❌ Connection Error:", error);
-      alert("Connection Error: " + error.message);
-    });
+  try {
+
+    window.tcaSupabase = window.supabase.createClient(
+      url,
+      key
+    );
+
+    console.log("TeraByte Supabase client initialized.");
+
+  } catch (error) {
+
+    console.error(
+      "Failed to initialize Supabase:",
+      error
+    );
+
+  }
+
 })();
