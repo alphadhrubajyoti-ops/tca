@@ -1,40 +1,51 @@
+"use strict";
+
 let currentUser = null;
 let students = [];
 let posts = [];
 let messages = [];
+
 let selectedStudent = null;
 let registrationResult = null;
+let photoFile = null;
+
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
 
 const $ = id => document.getElementById(id);
 
 const money = n =>
-  '₹' + Number(n || 0).toLocaleString('en-IN');
+  "₹" + Number(n || 0).toLocaleString("en-IN");
 
-const esc = s =>
-  String(s ?? '').replace(/[&<>'"]/g, c => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    "'": '&#39;',
-    '"': '&quot;'
-  }[c]));
+const esc = value =>
+  String(value ?? "").replace(/[&<>'"]/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;"
+  }[char]));
 
-function toast(msg) {
-  const el = $('toast');
+function toast(message) {
+
+  const el = $("toast");
 
   if (!el) {
-    console.log(msg);
+    console.log(message);
     return;
   }
 
-  el.textContent = msg;
-  el.classList.remove('hidden');
+  el.textContent = message;
 
-  clearTimeout(window.__toast);
+  el.classList.remove("hidden");
 
-  window.__toast = setTimeout(() => {
-    el.classList.add('hidden');
-  }, 3000);
+  clearTimeout(window.__toastTimer);
+
+  window.__toastTimer = setTimeout(() => {
+    el.classList.add("hidden");
+  }, 3500);
 }
 
 
@@ -42,126 +53,202 @@ function toast(msg) {
    REGISTRATION NUMBER
    ========================================================= */
 
+/*
+  This is the important part.
+
+  We first try the Supabase RPC function.
+
+  If RPC fails, we look at existing students.
+
+  If that also fails, we generate a temporary fallback
+  so the registration field NEVER remains blank.
+*/
+
 async function nextAdmission() {
 
-  /*
-    First try the Supabase RPC function.
-  */
+  /* -----------------------------------------
+     METHOD 1 — Supabase RPC
+     ----------------------------------------- */
 
   try {
 
-    const { data, error } =
-      await SB().rpc('next_admission_no');
+    const {
+      data,
+      error
+    } = await SB().rpc("next_admission_no");
 
     if (!error && data) {
-      return String(data);
+
+      const number = String(data).trim();
+
+      if (number) {
+        return number;
+      }
     }
 
-    console.warn(
-      'RPC next_admission_no failed:',
-      error
-    );
+    if (error) {
+      console.warn(
+        "next_admission_no RPC error:",
+        error
+      );
+    }
 
   } catch (error) {
 
     console.warn(
-      'RPC registration number failed:',
+      "RPC registration number failed:",
       error
     );
   }
 
 
-  /*
-    Fallback:
-    Read the latest student admission number.
-  */
+  /* -----------------------------------------
+     METHOD 2 — Find highest existing number
+     ----------------------------------------- */
 
   try {
 
-    const { data, error } = await SB()
-      .from('students')
-      .select('admission_no')
-      .not('admission_no', 'is', null)
-      .order('created_at', {
-        ascending: false
-      })
-      .limit(100);
+    const {
+      data,
+      error
+    } = await SB()
+      .from("students")
+      .select("admission_no")
+      .not("admission_no", "is", null);
 
-    if (error) {
-      throw error;
-    }
+    if (!error) {
 
-    let highest = 0;
+      let highest = 0;
 
-    (data || []).forEach(student => {
+      (data || []).forEach(student => {
 
-      const value =
-        String(student.admission_no || '');
-
-      /*
-        Accept formats such as:
-
-        TCA00001
-        TCA260001
-        00001
-        260001
-      */
-
-      const numbers =
-        value.match(/\d+/g);
-
-      if (!numbers || !numbers.length) {
-        return;
-      }
-
-      const number =
-        parseInt(
-          numbers[numbers.length - 1],
-          10
-        );
-
-      if (Number.isFinite(number)) {
+        const value =
+          String(
+            student.admission_no || ""
+          );
 
         /*
-          For TCA260001, use the final numeric part.
+          Extract the LAST group of digits.
+
+          Examples:
+
+          TCA00001
+          TCA260001
+          TCA20260001
         */
 
-        highest =
-          Math.max(highest, number);
-      }
-    });
+        const matches =
+          value.match(/\d+/g);
+
+        if (!matches || !matches.length) {
+          return;
+        }
+
+        const last =
+          parseInt(
+            matches[matches.length - 1],
+            10
+          );
+
+        if (
+          Number.isFinite(last) &&
+          last > highest
+        ) {
+          highest = last;
+        }
+      });
 
 
-    /*
-      Generate a simple reliable number.
-    */
+      return (
+        "TCA" +
+        String(highest + 1)
+          .padStart(5, "0")
+      );
+    }
 
-    const next =
-      highest + 1;
+  } catch (error) {
 
-    return (
-      'TCA' +
-      String(next).padStart(5, '0')
+    console.warn(
+      "Database fallback failed:",
+      error
     );
+  }
+
+
+  /* -----------------------------------------
+     METHOD 3 — Guaranteed fallback
+     ----------------------------------------- */
+
+  return (
+    "TCA" +
+    Date.now()
+      .toString()
+      .slice(-8)
+  );
+}
+
+
+/*
+  Put the number into the actual HTML field.
+*/
+
+async function showNextAdmissionNumber() {
+
+  const field =
+    $("admissionNo");
+
+  if (!field) {
+
+    console.error(
+      "ERROR: #admissionNo was not found."
+    );
+
+    return null;
+  }
+
+
+  field.value =
+    "Generating...";
+
+
+  try {
+
+    const number =
+      await nextAdmission();
+
+
+    field.value =
+      number;
+
+
+    console.log(
+      "Registration number:",
+      number
+    );
+
+
+    return number;
 
   } catch (error) {
 
     console.error(
-      'Fallback registration number failed:',
+      "Registration number error:",
       error
     );
 
-    /*
-      Last-resort temporary number.
-      This guarantees the form does not stay blank.
-    */
 
-    const random =
-      Math.floor(
-        10000 + Math.random() * 90000
-      );
+    const fallback =
+      "TCA" +
+      Date.now()
+        .toString()
+        .slice(-8);
 
-    return `TCA${random}`;
+
+    field.value =
+      fallback;
+
+
+    return fallback;
   }
 }
 
@@ -173,7 +260,8 @@ async function nextAdmission() {
 async function init() {
 
   currentUser =
-    await requireRole('staff');
+    await requireRole("staff");
+
 
   if (!currentUser) {
     return false;
@@ -182,29 +270,19 @@ async function init() {
 
   const name =
     currentUser.user_metadata?.name ||
-    currentUser.email?.split('@')[0] ||
-    'Admin';
+    currentUser.email?.split("@")[0] ||
+    "Administrator";
 
 
-  if ($('adminName')) {
-    $('adminName').textContent = name;
+  if ($("adminName")) {
+    $("adminName").textContent =
+      name;
   }
 
-  if ($('adminAvatar')) {
-    $('adminAvatar').textContent =
-      (name[0] || 'A').toUpperCase();
-  }
 
-  const userSpan =
-    document.querySelector('.user span');
-
-  if (userSpan) {
-
-    userSpan.textContent =
-      (
-        currentUser.user_metadata?.role ||
-        'admin'
-      ).toUpperCase();
+  if ($("adminAvatar")) {
+    $("adminAvatar").textContent =
+      (name[0] || "A").toUpperCase();
   }
 
 
@@ -213,116 +291,128 @@ async function init() {
 
 
 /* =========================================================
-   LOAD DATABASE
+   REFRESH DATABASE
    ========================================================= */
 
 async function refreshAll() {
 
   try {
 
-    const [
-      studentsResponse,
-      postsResponse,
-      messagesResponse
-    ] = await Promise.all([
-
-      SB()
-        .from('students')
-        .select('*')
-        .order('created_at', {
-          ascending: false
-        }),
-
-      SB()
-        .from('posts')
-        .select('*')
-        .order('created_at', {
-          ascending: false
-        }),
-
-      SB()
-        .from('messages')
-        .select('*')
-        .order('created_at', {
-          ascending: false
-        })
-        .limit(50)
-
-    ]);
+    const studentsRequest =
+      await SB()
+        .from("students")
+        .select("*")
+        .order(
+          "created_at",
+          {
+            ascending: false
+          }
+        );
 
 
-    if (studentsResponse.error) {
-      throw studentsResponse.error;
-    }
-
-    /*
-      Don't let a posts/messages problem
-      prevent the student system from loading.
-    */
-
-    if (postsResponse.error) {
-
-      console.warn(
-        'Posts loading failed:',
-        postsResponse.error
-      );
-    }
-
-    if (messagesResponse.error) {
-
-      console.warn(
-        'Messages loading failed:',
-        messagesResponse.error
-      );
+    if (studentsRequest.error) {
+      throw studentsRequest.error;
     }
 
 
     students =
-      studentsResponse.data || [];
-
-    posts =
-      postsResponse.error
-        ? []
-        : (postsResponse.data || []);
-
-    messages =
-      messagesResponse.error
-        ? []
-        : (messagesResponse.data || []);
-
-
-    renderOverview();
-    renderStudents();
-    renderFees();
-    renderCertificates();
-    renderIdSelect();
-    renderPosts();
-    renderMessages();
-    populateRecipients();
+      studentsRequest.data || [];
 
 
   } catch (error) {
 
     console.error(
-      'Database refresh error:',
+      "Students loading error:",
       error
     );
 
-    /*
-      Don't destroy the registration page.
-    */
-
-    renderOverview();
-    renderStudents();
-    renderFees();
-    renderCertificates();
-    renderIdSelect();
-    renderPosts();
-    renderMessages();
-    populateRecipients();
-
-    throw error;
+    students = [];
   }
+
+
+  /* POSTS */
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await SB()
+        .from("posts")
+        .select("*")
+        .order(
+          "created_at",
+          {
+            ascending: false
+          }
+        );
+
+
+    if (error) {
+      throw error;
+    }
+
+    posts =
+      data || [];
+
+  } catch (error) {
+
+    console.warn(
+      "Posts loading error:",
+      error
+    );
+
+    posts = [];
+  }
+
+
+  /* MESSAGES */
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await SB()
+        .from("messages")
+        .select("*")
+        .order(
+          "created_at",
+          {
+            ascending: false
+          }
+        )
+        .limit(50);
+
+
+    if (error) {
+      throw error;
+    }
+
+    messages =
+      data || [];
+
+  } catch (error) {
+
+    console.warn(
+      "Messages loading error:",
+      error
+    );
+
+    messages = [];
+  }
+
+
+  renderOverview();
+  renderStudents();
+  renderFees();
+  renderCertificates();
+  renderIdSelect();
+  renderPosts();
+  renderMessages();
+  populateRecipients();
 }
 
 
@@ -330,149 +420,205 @@ async function refreshAll() {
    PAGE NAVIGATION
    ========================================================= */
 
-function showPage(id) {
+function showPage(pageId) {
 
   document
-    .querySelectorAll('.module')
-    .forEach(x =>
-      x.classList.remove('active')
-    );
+    .querySelectorAll(".module")
+    .forEach(section => {
 
-  const page = $(id);
+      section.classList.remove("active");
+    });
+
+
+  const page =
+    $(pageId);
+
 
   if (page) {
-    page.classList.add('active');
+    page.classList.add("active");
   }
 
 
   document
-    .querySelectorAll('.nav button')
-    .forEach(x =>
-      x.classList.toggle(
-        'active',
-        x.dataset.page === id
-      )
-    );
+    .querySelectorAll(".nav button")
+    .forEach(button => {
+
+      button.classList.toggle(
+        "active",
+        button.dataset.page === pageId
+      );
+    });
 
 
-  const names = {
+  const titles = {
 
     overview: [
-      'Dashboard',
-      'Academy overview and daily operations'
+      "Dashboard",
+      "Academy overview and daily operations"
     ],
 
     students: [
-      'Student Records',
-      'Search and manage registered students'
+      "Student Records",
+      "Search and manage registered students"
     ],
 
     admission: [
-      'New Admission',
-      'Register a student and create portal credentials'
+      "New Admission",
+      "Register a student and create portal credentials"
     ],
 
     fees: [
-      'Fees & Dues',
-      'Monitor payments and outstanding balances'
+      "Fees & Dues",
+      "Monitor payments and outstanding balances"
     ],
 
     certificates: [
-      'Certificates',
-      'Manage certificate status'
+      "Certificates",
+      "Manage certificate status"
     ],
 
     idcard: [
-      'ID Card',
-      'Generate and download student identity cards'
+      "ID Card",
+      "Generate and download student identity cards"
     ],
 
     posts: [
-      'Blog & Notices',
-      'Publish content for student portals'
+      "Blog & Notices",
+      "Publish content for student portals"
     ],
 
     messages: [
-      'Messages',
-      'Send private or academy-wide messages'
+      "Messages",
+      "Send private or academy-wide messages"
     ],
 
     settings: [
-      'Settings',
-      'System and security configuration'
+      "Settings",
+      "System and security configuration"
     ]
-
   };
 
 
-  if (names[id]) {
+  if (titles[pageId]) {
 
-    if ($('pageTitle')) {
-      $('pageTitle').textContent =
-        names[id][0];
+    if ($("pageTitle")) {
+      $("pageTitle").textContent =
+        titles[pageId][0];
     }
 
-    if ($('pageSub')) {
-      $('pageSub').textContent =
-        names[id][1];
+    if ($("pageSub")) {
+      $("pageSub").textContent =
+        titles[pageId][1];
     }
   }
 
 
-  window.scrollTo({
-    top: 0,
-    behavior: 'smooth'
-  });
+  /*
+    When opening New Admission,
+    make sure a number exists.
+  */
+
+  if (pageId === "admission") {
+
+    if (
+      $("admissionNo") &&
+      (
+        !$("admissionNo").value ||
+        $("admissionNo").value === "Generating..."
+      )
+    ) {
+
+      showNextAdmissionNumber();
+    }
+  }
 }
 
 
 /* =========================================================
-   NAVIGATION EVENTS
+   NAV BUTTONS
    ========================================================= */
 
 document
-  .querySelectorAll('[data-page]')
+  .querySelectorAll("[data-page]")
   .forEach(button => {
 
-    button.onclick = () =>
-      showPage(button.dataset.page);
+    button.addEventListener(
+      "click",
+      () => {
+
+        showPage(
+          button.dataset.page
+        );
+      }
+    );
   });
 
 
 document
-  .querySelectorAll('[data-page-jump]')
+  .querySelectorAll("[data-page-jump]")
   .forEach(button => {
 
-    button.onclick = () =>
-      showPage(button.dataset.pageJump);
+    button.addEventListener(
+      "click",
+      () => {
+
+        showPage(
+          button.dataset.pageJump
+        );
+      }
+    );
   });
 
 
-if ($('logoutBtn')) {
-  $('logoutBtn').onclick = logout;
+/* =========================================================
+   LOGOUT
+   ========================================================= */
+
+if ($("logoutBtn")) {
+
+  $("logoutBtn").onclick =
+    async () => {
+
+      try {
+
+        await logout();
+
+      } catch (error) {
+
+        console.error(
+          error
+        );
+
+        toast(
+          error.message ||
+          "Logout failed"
+        );
+      }
+    };
 }
 
 
-if ($('refresh')) {
+/* =========================================================
+   REFRESH BUTTON
+   ========================================================= */
 
-  $('refresh').onclick = async () => {
+if ($("refresh")) {
 
-    try {
+  $("refresh").onclick =
+    async () => {
 
       await refreshAll();
 
-      toast(
-        'Data refreshed from database'
-      );
+      /*
+        Refresh registration number too.
+      */
 
-    } catch (error) {
+      await showNextAdmissionNumber();
 
       toast(
-        error.message ||
-        'Unable to refresh data'
+        "Data refreshed"
       );
-    }
-  };
+    };
 }
 
 
@@ -484,16 +630,22 @@ function renderOverview() {
 
   const paid =
     students.reduce(
-      (a, s) =>
-        a + Number(s.paid || 0),
+      (sum, student) =>
+        sum +
+        Number(
+          student.paid || 0
+        ),
       0
     );
 
 
   const total =
     students.reduce(
-      (a, s) =>
-        a + Number(s.total_fees || 0),
+      (sum, student) =>
+        sum +
+        Number(
+          student.total_fees || 0
+        ),
       0
     );
 
@@ -505,54 +657,67 @@ function renderOverview() {
     );
 
 
-  const pct =
-    total
+  const percentage =
+    total > 0
       ? Math.round(
           paid / total * 100
         )
       : 0;
 
 
-  if ($('statStudents')) {
-    $('statStudents').textContent =
+  if ($("statStudents")) {
+    $("statStudents").textContent =
       students.length;
   }
 
-  if ($('statPaid')) {
-    $('statPaid').textContent =
+
+  if ($("statPaid")) {
+    $("statPaid").textContent =
       money(paid);
   }
 
-  if ($('statDue')) {
-    $('statDue').textContent =
+
+  if ($("statDue")) {
+    $("statDue").textContent =
       money(due);
   }
 
-  if ($('statPosts')) {
-    $('statPosts').textContent =
+
+  if ($("statPosts")) {
+
+    $("statPosts").textContent =
       posts.filter(
-        p => p.published
+        post => post.published
       ).length;
   }
 
-  if ($('feePercent')) {
-    $('feePercent').textContent =
-      pct + '%';
+
+  if ($("feePercent")) {
+    $("feePercent").textContent =
+      percentage + "%";
   }
 
-  if ($('feeBar')) {
-    $('feeBar').style.width =
-      pct + '%';
+
+  if ($("feeBar")) {
+    $("feeBar").style.width =
+      percentage + "%";
   }
 
-  if ($('paidMini')) {
-    $('paidMini').textContent =
+
+  if ($("paidMini")) {
+    $("paidMini").textContent =
       money(paid);
   }
 
-  if ($('dueMini')) {
-    $('dueMini').textContent =
+
+  if ($("dueMini")) {
+    $("dueMini").textContent =
       money(due);
+  }
+
+
+  if (!$("recentAdmissions")) {
+    return;
   }
 
 
@@ -560,74 +725,76 @@ function renderOverview() {
     students.slice(0, 6);
 
 
-  if (!$('recentAdmissions')) {
+  if (!recent.length) {
+
+    $("recentAdmissions").innerHTML = `
+      <div class="empty">
+        No students registered yet.
+      </div>
+    `;
+
     return;
   }
 
 
-  $('recentAdmissions').innerHTML =
-    recent.length
+  $("recentAdmissions").innerHTML = `
 
-      ? `
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Course</th>
-                <th>Date</th>
-                <th>Due</th>
-              </tr>
-            </thead>
+    <div class="table-wrap">
 
-            <tbody>
+      <table>
 
-              ${recent.map(s => `
+        <thead>
 
-                <tr>
+          <tr>
+            <th>Admission</th>
+            <th>Student</th>
+            <th>Course</th>
+            <th>Due</th>
+          </tr>
 
-                  <td>
-                    ${esc(s.name)}
-                  </td>
+        </thead>
 
-                  <td>
-                    ${esc(s.course)}
-                  </td>
+        <tbody>
 
-                  <td>
-                    ${esc(
-                      s.registration_date
-                    )}
-                  </td>
+          ${recent.map(student => `
 
-                  <td>
+            <tr>
 
-                    <span
-                      class="badge ${
-                        Number(s.due_amount) > 0
-                          ? 'pending'
-                          : 'paid'
-                      }"
-                    >
-                      ${money(s.due_amount)}
-                    </span>
+              <td>
+                ${esc(
+                  student.admission_no ||
+                  "—"
+                )}
+              </td>
 
-                  </td>
+              <td>
+                ${esc(
+                  student.name
+                )}
+              </td>
 
-                </tr>
+              <td>
+                ${esc(
+                  student.course
+                )}
+              </td>
 
-              `).join('')}
+              <td>
+                ${money(
+                  student.due_amount
+                )}
+              </td>
 
-            </tbody>
-          </table>
-        </div>
-      `
+            </tr>
 
-      : `
-        <div class="empty">
-          No students registered yet.
-        </div>
-      `;
+          `).join("")}
+
+        </tbody>
+
+      </table>
+
+    </div>
+  `;
 }
 
 
@@ -637,133 +804,155 @@ function renderOverview() {
 
 function renderStudents() {
 
-  const q =
-    ($('studentSearch')?.value || '')
-      .toLowerCase();
-
-
-  const rows =
-    students.filter(student =>
-
-      [
-        student.name,
-        student.admission_no,
-        student.username,
-        student.contact,
-        student.course
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
-
-    );
-
-
-  if (!$('studentsTable')) {
+  if (!$("studentsTable")) {
     return;
   }
 
 
-  $('studentsTable').innerHTML =
+  const query =
+    (
+      $("studentSearch")?.value ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
 
-    rows.length
 
-      ? rows.map(s => `
+  const rows =
+    students.filter(student => {
 
-        <tr>
+      const text =
+        [
+          student.name,
+          student.admission_no,
+          student.username,
+          student.contact,
+          student.course
+        ]
+          .join(" ")
+          .toLowerCase();
 
-          <td>
-            <strong>
-              ${esc(s.admission_no || '—')}
-            </strong>
-          </td>
 
-          <td>
-            ${esc(s.name)}
-          </td>
+      return text.includes(query);
+    });
 
-          <td>
-            <code>
-              ${esc(s.username || '—')}
-            </code>
-          </td>
 
-          <td>
-            ${esc(s.contact)}
-          </td>
+  if (!rows.length) {
 
-          <td>
-            ${esc(s.course)}
-          </td>
+    $("studentsTable").innerHTML = `
 
-          <td>
-            ${money(s.total_fees)}
-          </td>
+      <tr>
 
-          <td>
-            ${money(s.paid)}
-          </td>
+        <td
+          colspan="10"
+          class="empty"
+        >
+          No students found.
+        </td>
 
-          <td>
-            <strong>
-              ${money(s.due_amount)}
-            </strong>
-          </td>
+      </tr>
 
-          <td>
+    `;
 
-            <span
-              class="badge ${
-                s.certificate_status === 'Issued'
-                  ? 'paid'
-                  : 'pending'
-              }"
-            >
-              ${esc(
-                s.certificate_status ||
-                'Pending'
-              )}
-            </span>
+    return;
+  }
 
-          </td>
 
-          <td>
+  $("studentsTable").innerHTML =
+    rows.map(student => `
 
-            <button
-              class="btn secondary"
-              onclick="editStudent('${s.id}')"
-            >
-              Edit
-            </button>
+      <tr>
 
-            <button
-              class="btn danger"
-              onclick="deleteStudent('${s.id}')"
-            >
-              Delete
-            </button>
+        <td>
+          <strong>
+            ${esc(
+              student.admission_no ||
+              "—"
+            )}
+          </strong>
+        </td>
 
-          </td>
+        <td>
+          ${esc(
+            student.name
+          )}
+        </td>
 
-        </tr>
+        <td>
+          ${esc(
+            student.username ||
+            "—"
+          )}
+        </td>
 
-      `).join('')
+        <td>
+          ${esc(
+            student.contact
+          )}
+        </td>
 
-      : `
-        <tr>
-          <td
-            colspan="10"
-            class="empty"
+        <td>
+          ${esc(
+            student.course
+          )}
+        </td>
+
+        <td>
+          ${money(
+            student.total_fees
+          )}
+        </td>
+
+        <td>
+          ${money(
+            student.paid
+          )}
+        </td>
+
+        <td>
+          ${money(
+            student.due_amount
+          )}
+        </td>
+
+        <td>
+          ${esc(
+            student.certificate_status ||
+            "Not Eligible"
+          )}
+        </td>
+
+        <td>
+
+          <button
+            class="btn secondary"
+            onclick="
+              editStudent('${student.id}')
+            "
           >
-            No matching students.
-          </td>
-        </tr>
-      `;
+            Edit
+          </button>
+
+          <button
+            class="btn danger"
+            onclick="
+              deleteStudent('${student.id}')
+            "
+          >
+            Delete
+          </button>
+
+        </td>
+
+      </tr>
+
+    `).join("");
 }
 
 
-if ($('studentSearch')) {
-  $('studentSearch').oninput =
+if ($("studentSearch")) {
+
+  $("studentSearch").oninput =
     renderStudents;
 }
 
@@ -774,558 +963,207 @@ if ($('studentSearch')) {
 
 function renderFees() {
 
-  const q =
-    ($('feeSearch')?.value || '')
-      .toLowerCase();
+  if (!$("feesTable")) {
+    return;
+  }
 
-  const f =
-    $('feeFilter')?.value || 'all';
+
+  const query =
+    (
+      $("feeSearch")?.value ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+
+
+  const filter =
+    $("feeFilter")?.value ||
+    "all";
 
 
   let rows =
-    students.filter(s =>
+    students.filter(student => {
 
-      [
-        s.name,
-        s.admission_no,
-        s.course
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
-    );
+      const text =
+        [
+          student.name,
+          student.admission_no,
+          student.course
+        ]
+          .join(" ")
+          .toLowerCase();
 
 
-  if (f === 'due') {
+      return text.includes(query);
+    });
+
+
+  if (filter === "due") {
 
     rows =
       rows.filter(
-        s => Number(s.due_amount) > 0
+        student =>
+          Number(
+            student.due_amount || 0
+          ) > 0
       );
   }
 
 
-  if (f === 'paid') {
+  if (filter === "paid") {
 
     rows =
       rows.filter(
-        s => Number(s.due_amount) <= 0
+        student =>
+          Number(
+            student.due_amount || 0
+          ) <= 0
       );
   }
 
 
-  if (!$('feesTable')) {
+  if (!rows.length) {
+
+    $("feesTable").innerHTML = `
+
+      <tr>
+
+        <td
+          colspan="8"
+          class="empty"
+        >
+          No fee records.
+        </td>
+
+      </tr>
+
+    `;
+
     return;
   }
 
 
-  $('feesTable').innerHTML =
+  $("feesTable").innerHTML =
+    rows.map(student => {
 
-    rows.length
+      const total =
+        Number(
+          student.total_fees || 0
+        );
 
-      ? rows.map(s => {
-
-          const p =
-            s.total_fees
-
-              ? Math.min(
-                  100,
-                  Math.round(
-                    s.paid /
-                    s.total_fees *
-                    100
-                  )
-                )
-
-              : 0;
+      const paid =
+        Number(
+          student.paid || 0
+        );
 
 
-          return `
-
-            <tr>
-
-              <td>
-                ${esc(
-                  s.admission_no || '—'
-                )}
-              </td>
-
-              <td>
-                ${esc(s.name)}
-              </td>
-
-              <td>
-                ${esc(s.course)}
-              </td>
-
-              <td>
-                ${money(s.total_fees)}
-              </td>
-
-              <td>
-                ${money(s.paid)}
-              </td>
-
-              <td>
-                <strong>
-                  ${money(s.due_amount)}
-                </strong>
-              </td>
-
-              <td>
-
-                <div class="progress">
-                  <i
-                    style="width:${p}%"
-                  ></i>
-                </div>
-
-              </td>
-
-              <td>
-
-                <button
-                  class="btn primary"
-                  onclick="recordPayment('${s.id}')"
-                >
-                  Update
-                </button>
-
-              </td>
-
-            </tr>
-
-          `;
-        }).join('')
-
-      : `
-        <tr>
-          <td
-            colspan="8"
-            class="empty"
-          >
-            No fee records.
-          </td>
-        </tr>
-      `;
-}
+      const percent =
+        total > 0
+          ? Math.min(
+              100,
+              Math.round(
+                paid /
+                total *
+                100
+              )
+            )
+          : 0;
 
 
-if ($('feeSearch')) {
-  $('feeSearch').oninput =
-    renderFees;
-}
-
-
-if ($('feeFilter')) {
-  $('feeFilter').onchange =
-    renderFees;
-}
-
-
-/* =========================================================
-   CERTIFICATES
-   ========================================================= */
-
-function renderCertificates() {
-
-  if (!$('certTable')) {
-    return;
-  }
-
-
-  $('certTable').innerHTML =
-
-    students.length
-
-      ? students.map(s => `
+      return `
 
         <tr>
 
           <td>
             ${esc(
-              s.admission_no || '—'
+              student.admission_no ||
+              "—"
             )}
           </td>
 
           <td>
-            ${esc(s.name)}
+            ${esc(
+              student.name
+            )}
           </td>
 
           <td>
-            ${esc(s.course)}
+            ${esc(
+              student.course
+            )}
+          </td>
+
+          <td>
+            ${money(total)}
+          </td>
+
+          <td>
+            ${money(paid)}
+          </td>
+
+          <td>
+            ${money(
+              student.due_amount
+            )}
           </td>
 
           <td>
 
-            <span
-              class="badge ${
-                s.certificate_status === 'Issued'
-                  ? 'paid'
-                  : 'pending'
-              }"
-            >
-              ${esc(
-                s.certificate_status ||
-                'Not Eligible'
-              )}
-            </span>
+            <div class="progress">
+
+              <i
+                style="
+                  width:${percent}%
+                "
+              ></i>
+
+            </div>
 
           </td>
 
           <td>
 
-            <select
-              onchange="
-                setCertificate(
-                  '${s.id}',
-                  this.value
-                )
+            <button
+              class="btn primary"
+              onclick="
+                recordPayment('${student.id}')
               "
             >
-
-              <option
-                ${
-                  s.certificate_status ===
-                  'Not Eligible'
-                    ? 'selected'
-                    : ''
-                }
-              >
-                Not Eligible
-              </option>
-
-              <option
-                ${
-                  s.certificate_status ===
-                  'Pending'
-                    ? 'selected'
-                    : ''
-                }
-              >
-                Pending
-              </option>
-
-              <option
-                ${
-                  s.certificate_status ===
-                  'Issued'
-                    ? 'selected'
-                    : ''
-                }
-              >
-                Issued
-              </option>
-
-            </select>
+              Update
+            </button>
 
           </td>
 
         </tr>
 
-      `).join('')
-
-      : `
-        <tr>
-          <td
-            colspan="5"
-            class="empty"
-          >
-            No students registered.
-          </td>
-        </tr>
       `;
+    }).join("");
+}
+
+
+if ($("feeSearch")) {
+  $("feeSearch").oninput =
+    renderFees;
+}
+
+
+if ($("feeFilter")) {
+  $("feeFilter").onchange =
+    renderFees;
 }
 
 
 /* =========================================================
-   ID CARD
-   ========================================================= */
-
-function renderIdSelect() {
-
-  if (!$('idStudentSelect')) {
-    return;
-  }
-
-
-  $('idStudentSelect').innerHTML =
-
-    '<option value="">Select student</option>' +
-
-    students.map(s => `
-
-      <option value="${s.id}">
-
-        ${esc(
-          s.admission_no || '—'
-        )}
-
-        —
-
-        ${esc(s.name)}
-
-      </option>
-
-    `).join('');
-
-
-  $('idStudentSelect').onchange =
-    () => {
-
-      selectedStudent =
-        students.find(
-          s =>
-            s.id ===
-            $('idStudentSelect').value
-        ) || null;
-
-
-      renderIdCard(
-        selectedStudent,
-        $('idCardPreview')
-      );
-    };
-}
-
-
-async function photoUrl(path) {
-
-  if (!path) {
-    return '';
-  }
-
-
-  const {
-    data,
-    error
-  } =
-    await SB()
-      .storage
-      .from('student-photos')
-      .createSignedUrl(
-        path,
-        3600
-      );
-
-
-  return error
-    ? ''
-    : data?.signedUrl || '';
-}
-
-
-async function idCardHTML(s) {
-
-  const url =
-    await photoUrl(
-      s.photo_path
-    );
-
-
-  return `
-
-    <div
-      id="idCardCanvas"
-      class="id-card-modern"
-    >
-
-      <div class="id-top">
-
-        <img
-          src="logo.png"
-          alt=""
-        >
-
-        <h3>
-          TeraByte Computer Academy
-        </h3>
-
-        <p>
-          LEARN • GROW • SUCCEED
-        </p>
-
-      </div>
-
-
-      ${
-        url
-          ? `
-            <img
-              class="id-photo"
-              src="${esc(url)}"
-              alt="Student photo"
-            >
-          `
-          : ''
-      }
-
-
-      <div class="id-content">
-
-        <h2>
-          ${esc(s.name)}
-        </h2>
-
-        <div class="id-reg">
-          ${esc(
-            s.admission_no || '—'
-          )}
-        </div>
-
-
-        <div class="id-row">
-          <span>Course</span>
-          <strong>
-            ${esc(s.course)}
-          </strong>
-        </div>
-
-
-        <div class="id-row">
-          <span>Class</span>
-          <strong>
-            ${esc(
-              s.class_level || '—'
-            )}
-          </strong>
-        </div>
-
-
-        <div class="id-row">
-          <span>Batch</span>
-          <strong>
-            ${esc(
-              s.batch || '—'
-            )}
-          </strong>
-        </div>
-
-
-        <div class="id-row">
-          <span>Contact</span>
-          <strong>
-            ${esc(s.contact)}
-          </strong>
-        </div>
-
-      </div>
-
-
-      <div class="id-footer">
-        PROPERTY OF TERABYTE COMPUTER ACADEMY
-      </div>
-
-    </div>
-  `;
-}
-
-
-async function renderIdCard(
-  s,
-  target
-) {
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML =
-    s
-
-      ? await idCardHTML(s)
-
-      : `
-        <div class="empty">
-          Select a student to preview
-          the ID card.
-        </div>
-      `;
-}
-
-
-async function downloadElementJpg(
-  el,
-  filename
-) {
-
-  if (!el) {
-    return toast(
-      'Nothing to download'
-    );
-  }
-
-
-  const canvas =
-    await html2canvas(
-      el,
-      {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: '#fff',
-        logging: false
-      }
-    );
-
-
-  const a =
-    document.createElement('a');
-
-  a.download = filename;
-
-  a.href =
-    canvas.toDataURL(
-      'image/jpeg',
-      0.95
-    );
-
-  a.click();
-}
-
-
-if ($('downloadId')) {
-
-  $('downloadId').onclick =
-    async () => {
-
-      if (!selectedStudent) {
-
-        return toast(
-          'Select a student first'
-        );
-      }
-
-
-      await downloadElementJpg(
-        $('idCardCanvas'),
-
-        `${
-          selectedStudent.admission_no ||
-          'student'
-        }_ID_Card.jpg`
-      );
-    };
-}
-
-
-/* =========================================================
-   FEES FORM
+   FEE CALCULATOR
    ========================================================= */
 
 function updateDue() {
 
-  if (
-    !$('totalFees') ||
-    !$('feesPaid')
-  ) {
-    return;
-  }
-
-
   const total =
     Number(
-      $('totalFees').value || 0
+      $("totalFees")?.value ||
+      0
     );
 
 
@@ -1335,7 +1173,8 @@ function updateDue() {
       Math.max(
         0,
         Number(
-          $('feesPaid').value || 0
+          $("feesPaid")?.value ||
+          0
         )
       )
     );
@@ -1348,33 +1187,33 @@ function updateDue() {
     );
 
 
-  if ($('dueAmount')) {
+  if ($("dueAmount")) {
 
-    $('dueAmount').value =
+    $("dueAmount").value =
       money(due);
   }
 
 
-  if ($('paymentStatus')) {
+  if ($("paymentStatus")) {
 
-    $('paymentStatus').value =
+    $("paymentStatus").value =
       due === 0
-        ? 'Paid'
+        ? "Paid"
         : paid > 0
-          ? 'Partial'
-          : 'Pending';
+          ? "Partial"
+          : "Pending";
   }
 }
 
 
-if ($('totalFees')) {
-  $('totalFees').oninput =
+if ($("totalFees")) {
+  $("totalFees").oninput =
     updateDue;
 }
 
 
-if ($('feesPaid')) {
-  $('feesPaid').oninput =
+if ($("feesPaid")) {
+  $("feesPaid").oninput =
     updateDue;
 }
 
@@ -1383,17 +1222,14 @@ if ($('feesPaid')) {
    PHOTO
    ========================================================= */
 
-let photoFile = null;
-let photoDataUrl = '';
+if ($("photo")) {
 
-
-if ($('photo')) {
-
-  $('photo').onchange =
-    e => {
+  $("photo").onchange =
+    event => {
 
       photoFile =
-        e.target.files[0] || null;
+        event.target.files[0] ||
+        null;
 
 
       if (!photoFile) {
@@ -1401,15 +1237,32 @@ if ($('photo')) {
       }
 
 
-      if ($('photoPreview')) {
+      if (
+        photoFile.size >
+        2 * 1024 * 1024
+      ) {
 
-        $('photoPreview').src =
+        photoFile = null;
+
+        event.target.value = "";
+
+        toast(
+          "Photo must be under 2 MB."
+        );
+
+        return;
+      }
+
+
+      if ($("photoPreview")) {
+
+        $("photoPreview").src =
           URL.createObjectURL(
             photoFile
           );
 
-        $('photoPreview').style.display =
-          'block';
+        $("photoPreview").style.display =
+          "block";
       }
     };
 }
@@ -1429,30 +1282,15 @@ async function uploadPhoto(
   }
 
 
-  if (
-    file.size >
-    2 * 1024 * 1024
-  ) {
-
-    throw new Error(
-      'Photo must be under 2 MB.'
-    );
-  }
-
-
-  const ext =
+  const extension =
     file.name
-      .split('.')
+      .split(".")
       .pop()
-      .toLowerCase()
-      .replace(
-        /[^a-z0-9]/g,
-        ''
-      ) || 'jpg';
+      .toLowerCase();
 
 
   const path =
-    `students/${admissionNo}-${crypto.randomUUID()}.${ext}`;
+    `students/${admissionNo}-${crypto.randomUUID()}.${extension}`;
 
 
   const {
@@ -1460,7 +1298,7 @@ async function uploadPhoto(
   } =
     await SB()
       .storage
-      .from('student-photos')
+      .from("student-photos")
       .upload(
         path,
         file,
@@ -1485,40 +1323,45 @@ async function uploadPhoto(
    RESET ADMISSION
    ========================================================= */
 
+/*
+  IMPORTANT:
+  We DO NOT clear admissionNo here.
+*/
+
 function resetAdmission() {
 
-  if ($('admissionNo')) {
-    $('admissionNo').value = '';
-  }
+  if ($("regDate")) {
 
-
-  if ($('regDate')) {
-
-    $('regDate').value =
+    $("regDate").value =
       new Date()
         .toISOString()
         .slice(0, 10);
   }
 
 
-  if ($('dueAmount')) {
-    $('dueAmount').value =
-      '₹0';
+  if ($("dueAmount")) {
+    $("dueAmount").value =
+      "₹0";
   }
 
 
-  if ($('paymentStatus')) {
-    $('paymentStatus').value =
-      'Pending';
+  if ($("paymentStatus")) {
+    $("paymentStatus").value =
+      "Pending";
   }
 
 
-  if ($('photoPreview')) {
+  if ($("photoPreview")) {
 
-    $('photoPreview').style.display =
-      'none';
+    $("photoPreview").style.display =
+      "none";
 
-    $('photoPreview').src = '';
+    $("photoPreview").src = "";
+  }
+
+
+  if ($("photo")) {
+    $("photo").value = "";
   }
 
 
@@ -1530,34 +1373,28 @@ function resetAdmission() {
    RESET BUTTON
    ========================================================= */
 
-if ($('resetAdmission')) {
+if ($("resetAdmission")) {
 
-  $('resetAdmission').onclick =
-    async () => {
+  $("resetAdmission").onclick =
+    async event => {
+
+      /*
+        Prevent browser's default reset
+        because we want a NEW admission number.
+      */
+
+      event.preventDefault();
+
 
       resetAdmission();
 
-      try {
 
-        const number =
-          await nextAdmission();
+      await showNextAdmissionNumber();
 
-        if ($('admissionNo')) {
 
-          $('admissionNo').value =
-            number;
-        }
-
-      } catch (error) {
-
-        console.error(
-          error
-        );
-
-        toast(
-          'Could not generate registration number'
-        );
-      }
+      toast(
+        "New registration number generated"
+      );
     };
 }
 
@@ -1566,48 +1403,50 @@ if ($('resetAdmission')) {
    STUDENT REGISTRATION
    ========================================================= */
 
-if ($('admissionForm')) {
+if ($("admissionForm")) {
 
-  $('admissionForm').onsubmit =
-    async e => {
+  $("admissionForm").onsubmit =
+    async event => {
 
-      e.preventDefault();
-
-
-      const btn =
-        $('registerBtn');
+      event.preventDefault();
 
 
-      if (btn) {
+      const button =
+        $("registerBtn");
 
-        btn.disabled = true;
 
-        btn.textContent =
-          'Creating account…';
+      if (button) {
+
+        button.disabled =
+          true;
+
+        button.textContent =
+          "Creating account...";
       }
 
 
       try {
 
         /*
-          ALWAYS generate a number
+          ALWAYS generate a fresh number
           immediately before registration.
         */
 
         const admissionNo =
-          await nextAdmission();
+          await showNextAdmissionNumber();
+
+
+        if (!admissionNo) {
+
+          throw new Error(
+            "Could not generate registration number."
+          );
+        }
 
 
         /*
-          Show it on the page.
+          Build payload.
         */
-
-        if ($('admissionNo')) {
-
-          $('admissionNo').value =
-            admissionNo;
-        }
-
 
         const payload = {
 
@@ -1615,57 +1454,59 @@ if ($('admissionForm')) {
             admissionNo,
 
           registration_date:
-            $('regDate')?.value ||
+            $("regDate")?.value ||
             new Date()
               .toISOString()
               .slice(0, 10),
 
           name:
-            $('studentName')?.value
-              .trim() || '',
+            $("studentName")?.value
+              .trim() || "",
 
           father_name:
-            $('fatherName')?.value
-              .trim() || '',
+            $("fatherName")?.value
+              .trim() || "",
 
           contact:
-            $('contact')?.value
-              .trim() || '',
+            $("contact")?.value
+              .trim() || "",
 
           email:
-            $('studentEmail')?.value
+            $("studentEmail")?.value
               .trim() || null,
 
           class_level:
-            $('classLevel')?.value
-              .trim() || '',
+            $("classLevel")?.value
+              .trim() || "",
 
           batch:
-            $('batch')?.value || '',
+            $("batch")?.value || "",
 
           course:
-            $('course')?.value || '',
+            $("course")?.value || "",
 
           duration:
-            $('duration')?.value || '',
+            $("duration")?.value || "",
 
           address:
-            $('address')?.value
-              .trim() || '',
+            $("address")?.value
+              .trim() || "",
 
           total_fees:
             Number(
-              $('totalFees')?.value || 0
+              $("totalFees")?.value ||
+              0
             ),
 
           paid:
             Number(
-              $('feesPaid')?.value || 0
+              $("feesPaid")?.value ||
+              0
             ),
 
           certificate_status:
-            $('certificate')?.value ||
-            'Not Eligible'
+            $("certificate")?.value ||
+            "Not Eligible"
         };
 
 
@@ -1679,14 +1520,14 @@ if ($('admissionForm')) {
 
         payload.payment_status =
           payload.due_amount === 0
-            ? 'Paid'
+            ? "Paid"
             : payload.paid > 0
-              ? 'Partial'
-              : 'Pending';
+              ? "Partial"
+              : "Pending";
 
 
         /*
-          Upload photo.
+          Upload student photo.
         */
 
         if (photoFile) {
@@ -1699,42 +1540,56 @@ if ($('admissionForm')) {
         }
 
 
+        console.log(
+          "Sending registration:",
+          payload
+        );
+
+
         /*
-          Send to Edge Function.
+          Create student through Edge Function.
         */
 
         const {
-          data: fnData,
-          error: fnError
+          data,
+          error
         } =
           await SB()
             .functions
             .invoke(
-              'create-student',
+              "create-student",
               {
                 body: payload
               }
             );
 
 
-        if (fnError) {
-          throw fnError;
+        if (error) {
+          throw error;
+        }
+
+
+        if (data?.error) {
+
+          throw new Error(
+            data.error
+          );
         }
 
 
         if (
-          !fnData?.username ||
-          !fnData?.temporary_password
+          !data?.username ||
+          !data?.temporary_password
         ) {
 
           throw new Error(
-            'Student was created but credentials were not returned.'
+            "Student was created but credentials were not returned."
           );
         }
 
 
         /*
-          Save registration result.
+          Save result.
         */
 
         registrationResult = {
@@ -1742,10 +1597,10 @@ if ($('admissionForm')) {
           ...payload,
 
           username:
-            fnData.username,
+            data.username,
 
           temporary_password:
-            fnData.temporary_password
+            data.temporary_password
         };
 
 
@@ -1753,65 +1608,49 @@ if ($('admissionForm')) {
           Show credentials.
         */
 
-        if ($('generatedUsername')) {
+        if ($("generatedUsername")) {
 
-          $('generatedUsername')
+          $("generatedUsername")
             .textContent =
-            fnData.username;
+            data.username;
         }
 
 
-        if ($('generatedPassword')) {
+        if ($("generatedPassword")) {
 
-          $('generatedPassword')
+          $("generatedPassword")
             .textContent =
-            fnData.temporary_password;
+            data.temporary_password;
         }
 
 
-        if ($('credentialModal')) {
+        if ($("credentialModal")) {
 
-          $('credentialModal')
-            .classList.add('open');
+          $("credentialModal")
+            .classList.add("open");
         }
 
 
         /*
-          Clear form.
+          Clear student information,
+          but DON'T erase admission number.
         */
 
-        e.target.reset();
+        event.target.reset();
+
 
         resetAdmission();
 
 
         /*
-          Generate next number
-          immediately.
+          Generate the NEXT number.
         */
 
-        try {
-
-          const next =
-            await nextAdmission();
-
-          if ($('admissionNo')) {
-
-            $('admissionNo').value =
-              next;
-          }
-
-        } catch (numberError) {
-
-          console.warn(
-            'Next number generation failed:',
-            numberError
-          );
-        }
+        await showNextAdmissionNumber();
 
 
         /*
-          Refresh database.
+          Reload students.
         */
 
         try {
@@ -1821,39 +1660,40 @@ if ($('admissionForm')) {
         } catch (refreshError) {
 
           console.warn(
-            'Refresh failed:',
+            "Refresh after registration failed:",
             refreshError
           );
         }
 
 
         toast(
-          'Student registered successfully'
+          `Student registered successfully. Admission No: ${admissionNo}`
         );
 
 
-      } catch (err) {
+      } catch (error) {
 
         console.error(
-          'Registration error:',
-          err
+          "Registration failed:",
+          error
         );
 
 
         toast(
-          err.message ||
-          'Registration failed'
+          error.message ||
+          "Registration failed"
         );
 
 
       } finally {
 
-        if (btn) {
+        if (button) {
 
-          btn.disabled = false;
+          button.disabled =
+            false;
 
-          btn.textContent =
-            '✓ Complete Registration';
+          button.textContent =
+            "✓ Complete Registration";
         }
       }
     };
@@ -1861,75 +1701,89 @@ if ($('admissionForm')) {
 
 
 /* =========================================================
-   PAYMENT
+   PAYMENT UPDATE
    ========================================================= */
 
 async function recordPayment(id) {
 
-  const s =
+  const student =
     students.find(
-      x => x.id === id
+      item => item.id === id
     );
 
 
-  if (!s) {
+  if (!student) {
     return;
   }
 
 
-  const val =
+  const value =
     prompt(
-      `Enter new total amount paid for ${s.name}:`,
-      s.paid
+      `Enter total amount paid by ${student.name}:`,
+      student.paid || 0
     );
 
 
-  if (val === null) {
+  if (value === null) {
     return;
   }
 
 
   const paid =
-    Number(val);
+    Number(value);
+
+
+  const total =
+    Number(
+      student.total_fees || 0
+    );
 
 
   if (
     !Number.isFinite(paid) ||
     paid < 0 ||
-    paid > Number(s.total_fees)
+    paid > total
   ) {
 
-    return toast(
-      'Enter a valid payment amount.'
+    toast(
+      "Enter a valid payment amount."
     );
+
+    return;
   }
+
+
+  const due =
+    Math.max(
+      0,
+      total - paid
+    );
 
 
   const {
     error
   } =
     await SB()
-      .from('students')
+      .from("students")
       .update({
 
         paid,
 
         due_amount:
-          Math.max(
-            0,
-            Number(s.total_fees) -
-            paid
-          ),
+          due,
 
         payment_status:
-          paid === Number(s.total_fees)
-            ? 'Paid'
+          due === 0
+            ? "Paid"
             : paid > 0
-              ? 'Partial'
-              : 'Pending'
+              ? "Partial"
+              : "Pending"
 
       })
-      .eq('id', id);
+      .eq(
+        "id",
+        id
+      );
 
 
   if (error) {
@@ -1938,20 +1792,134 @@ async function recordPayment(id) {
       error.message
     );
 
-  } else {
-
-    await refreshAll();
-
-    toast(
-      'Payment updated'
-    );
+    return;
   }
+
+
+  await refreshAll();
+
+  toast(
+    "Payment updated"
+  );
 }
 
 
 /* =========================================================
    CERTIFICATE
    ========================================================= */
+
+function renderCertificates() {
+
+  if (!$("certTable")) {
+    return;
+  }
+
+
+  if (!students.length) {
+
+    $("certTable").innerHTML = `
+
+      <tr>
+
+        <td
+          colspan="5"
+          class="empty"
+        >
+          No students registered.
+        </td>
+
+      </tr>
+
+    `;
+
+    return;
+  }
+
+
+  $("certTable").innerHTML =
+    students.map(student => `
+
+      <tr>
+
+        <td>
+          ${esc(
+            student.admission_no ||
+            "—"
+          )}
+        </td>
+
+        <td>
+          ${esc(
+            student.name
+          )}
+        </td>
+
+        <td>
+          ${esc(
+            student.course
+          )}
+        </td>
+
+        <td>
+          ${esc(
+            student.certificate_status ||
+            "Not Eligible"
+          )}
+        </td>
+
+        <td>
+
+          <select
+            onchange="
+              setCertificate(
+                '${student.id}',
+                this.value
+              )
+            "
+          >
+
+            <option
+              ${
+                student.certificate_status ===
+                "Not Eligible"
+                  ? "selected"
+                  : ""
+              }
+            >
+              Not Eligible
+            </option>
+
+            <option
+              ${
+                student.certificate_status ===
+                "Pending"
+                  ? "selected"
+                  : ""
+              }
+            >
+              Pending
+            </option>
+
+            <option
+              ${
+                student.certificate_status ===
+                "Issued"
+                  ? "selected"
+                  : ""
+              }
+            >
+              Issued
+            </option>
+
+          </select>
+
+        </td>
+
+      </tr>
+
+    `).join("");
+}
+
 
 async function setCertificate(
   id,
@@ -1962,12 +1930,15 @@ async function setCertificate(
     error
   } =
     await SB()
-      .from('students')
+      .from("students")
       .update({
         certificate_status:
           status
       })
-      .eq('id', id);
+      .eq(
+        "id",
+        id
+      );
 
 
   if (error) {
@@ -1976,14 +1947,300 @@ async function setCertificate(
       error.message
     );
 
-  } else {
-
-    await refreshAll();
-
-    toast(
-      'Certificate status updated'
-    );
+    return;
   }
+
+
+  await refreshAll();
+
+  toast(
+    "Certificate status updated"
+  );
+}
+
+
+/* =========================================================
+   ID CARD
+   ========================================================= */
+
+function renderIdSelect() {
+
+  if (!$("idStudentSelect")) {
+    return;
+  }
+
+
+  $("idStudentSelect").innerHTML =
+    `
+      <option value="">
+        Select student
+      </option>
+    ` +
+    students.map(student => `
+
+      <option
+        value="${student.id}"
+      >
+        ${esc(
+          student.admission_no ||
+          "—"
+        )}
+        —
+        ${esc(
+          student.name
+        )}
+      </option>
+
+    `).join("");
+
+
+  $("idStudentSelect").onchange =
+    () => {
+
+      selectedStudent =
+        students.find(
+          student =>
+            student.id ===
+            $("idStudentSelect").value
+        ) || null;
+
+
+      renderIdCard();
+    };
+}
+
+
+async function getPhotoUrl(path) {
+
+  if (!path) {
+    return "";
+  }
+
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await SB()
+        .storage
+        .from("student-photos")
+        .createSignedUrl(
+          path,
+          3600
+        );
+
+
+    if (error) {
+      return "";
+    }
+
+
+    return data?.signedUrl || "";
+
+  } catch {
+
+    return "";
+  }
+}
+
+
+async function renderIdCard() {
+
+  const target =
+    $("idCardPreview");
+
+
+  if (!target) {
+    return;
+  }
+
+
+  if (!selectedStudent) {
+
+    target.innerHTML = `
+
+      <div class="empty">
+        Select a student to preview
+        the ID card.
+      </div>
+
+    `;
+
+    return;
+  }
+
+
+  const photo =
+    await getPhotoUrl(
+      selectedStudent.photo_path
+    );
+
+
+  target.innerHTML = `
+
+    <div
+      id="idCardCanvas"
+      class="id-card-modern"
+    >
+
+      <div class="id-top">
+
+        <img
+          src="logo.png"
+          alt="TeraByte"
+        >
+
+        <h3>
+          TeraByte Computer Academy
+        </h3>
+
+        <p>
+          LEARN • GROW • SUCCEED
+        </p>
+
+      </div>
+
+
+      ${
+        photo
+          ? `
+            <img
+              class="id-photo"
+              src="${esc(photo)}"
+              alt="Student"
+            >
+          `
+          : ""
+      }
+
+
+      <div class="id-content">
+
+        <h2>
+          ${esc(
+            selectedStudent.name
+          )}
+        </h2>
+
+        <div class="id-reg">
+          ${esc(
+            selectedStudent.admission_no ||
+            "—"
+          )}
+        </div>
+
+        <div class="id-row">
+          <span>Course</span>
+          <strong>
+            ${esc(
+              selectedStudent.course
+            )}
+          </strong>
+        </div>
+
+        <div class="id-row">
+          <span>Class</span>
+          <strong>
+            ${esc(
+              selectedStudent.class_level ||
+              "—"
+            )}
+          </strong>
+        </div>
+
+        <div class="id-row">
+          <span>Batch</span>
+          <strong>
+            ${esc(
+              selectedStudent.batch ||
+              "—"
+            )}
+          </strong>
+        </div>
+
+        <div class="id-row">
+          <span>Contact</span>
+          <strong>
+            ${esc(
+              selectedStudent.contact
+            )}
+          </strong>
+        </div>
+
+      </div>
+
+      <div class="id-footer">
+        PROPERTY OF TERABYTE COMPUTER ACADEMY
+      </div>
+
+    </div>
+
+  `;
+}
+
+
+if ($("downloadId")) {
+
+  $("downloadId").onclick =
+    async () => {
+
+      if (!selectedStudent) {
+
+        toast(
+          "Select a student first."
+        );
+
+        return;
+      }
+
+
+      const canvasElement =
+        $("idCardCanvas");
+
+
+      if (!canvasElement) {
+
+        toast(
+          "ID card is not ready."
+        );
+
+        return;
+      }
+
+
+      const canvas =
+        await html2canvas(
+          canvasElement,
+          {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: "#ffffff"
+          }
+        );
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.download =
+        `${
+          selectedStudent.admission_no ||
+          "student"
+        }_ID_Card.jpg`;
+
+
+      link.href =
+        canvas.toDataURL(
+          "image/jpeg",
+          0.95
+        );
+
+
+      link.click();
+    };
 }
 
 
@@ -1993,52 +2250,179 @@ async function setCertificate(
 
 function editStudent(id) {
 
-  const s =
+  const student =
     students.find(
-      x => x.id === id
+      item => item.id === id
     );
 
 
-  if (!s) {
+  if (!student) {
     return;
   }
 
 
-  $('editId').value =
+  $("editId").value =
     id;
 
-  $('editName').value =
-    s.name || '';
+  $("editName").value =
+    student.name || "";
 
-  $('editFather').value =
-    s.father_name || '';
+  $("editFather").value =
+    student.father_name || "";
 
-  $('editContact').value =
-    s.contact || '';
+  $("editContact").value =
+    student.contact || "";
 
-  $('editEmail').value =
-    s.email || '';
+  $("editEmail").value =
+    student.email || "";
 
-  $('editClass').value =
-    s.class_level || '';
+  $("editClass").value =
+    student.class_level || "";
 
-  $('editCourse').value =
-    s.course || '';
+  $("editCourse").value =
+    student.course || "";
 
-  $('editTotal').value =
-    s.total_fees || 0;
+  $("editTotal").value =
+    student.total_fees || 0;
 
-  $('editPaid').value =
-    s.paid || 0;
+  $("editPaid").value =
+    student.paid || 0;
 
-  $('editCert').value =
-    s.certificate_status ||
-    'Not Eligible';
+  $("editCert").value =
+    student.certificate_status ||
+    "Not Eligible";
 
 
-  $('modal').classList.add(
-    'open'
-  );
+  if ($("modal")) {
+    $("modal").classList.add("open");
+  }
+}
+
+
+if ($("editForm")) {
+
+  $("editForm").onsubmit =
+    async event => {
+
+      event.preventDefault();
+
+
+      const id =
+        $("editId").value;
+
+
+      const total =
+        Number(
+          $("editTotal").value || 0
+        );
+
+
+      const paid =
+        Math.min(
+          total,
+          Math.max(
+            0,
+            Number(
+              $("editPaid").value || 0
+            )
+          )
+        );
+
+
+      const due =
+        Math.max(
+          0,
+          total - paid
+        );
+
+
+      const {
+        error
+      } =
+        await SB()
+          .from("students")
+          .update({
+
+            name:
+              $("editName")
+                .value
+                .trim(),
+
+            father_name:
+              $("editFather")
+                .value
+                .trim(),
+
+            contact:
+              $("editContact")
+                .value
+                .trim(),
+
+            email:
+              $("editEmail")
+                .value
+                .trim() ||
+              null,
+
+            class_level:
+              $("editClass")
+                .value
+                .trim(),
+
+            course:
+              $("editCourse")
+                .value,
+
+            total_fees:
+              total,
+
+            paid:
+              paid,
+
+            due_amount:
+              due,
+
+            payment_status:
+              due === 0
+                ? "Paid"
+                : paid > 0
+                  ? "Partial"
+                  : "Pending",
+
+            certificate_status:
+              $("editCert")
+                .value
+
+          })
+          .eq(
+            "id",
+            id
+          );
+
+
+      if (error) {
+
+        toast(
+          error.message
+        );
+
+        return;
+      }
+
+
+      if ($("modal")) {
+        $("modal")
+          .classList
+          .remove("open");
+      }
+
+
+      await refreshAll();
+
+      toast(
+        "Student updated"
+      );
+    };
 }
 
 
@@ -2050,10 +2434,9 @@ async function deleteStudent(id) {
 
   if (
     !confirm(
-      'Delete this student record and permanently disable the student portal account?'
+      "Delete this student record and permanently disable the student portal account?"
     )
   ) {
-
     return;
   }
 
@@ -2065,7 +2448,7 @@ async function deleteStudent(id) {
     await SB()
       .functions
       .invoke(
-        'delete-student',
+        "delete-student",
         {
           body: {
             id
@@ -2080,26 +2463,27 @@ async function deleteStudent(id) {
       error.message
     );
 
-  } else if (data?.error) {
+    return;
+  }
+
+
+  if (data?.error) {
 
     toast(
       data.error
     );
 
-  } else {
-
-    await refreshAll();
-
-    toast(
-      'Student account and record deleted'
-    );
+    return;
   }
+
+
+  await refreshAll();
+
+  toast(
+    "Student deleted"
+  );
 }
 
-
-/* =========================================================
-   GLOBAL FUNCTIONS
-   ========================================================= */
 
 window.editStudent =
   editStudent;
@@ -2115,183 +2499,52 @@ window.setCertificate =
 
 
 /* =========================================================
-   EDIT FORM
-   ========================================================= */
-
-if ($('editForm')) {
-
-  $('editForm').onsubmit =
-    async e => {
-
-      e.preventDefault();
-
-
-      const id =
-        $('editId').value;
-
-
-      const total =
-        Number(
-          $('editTotal').value || 0
-        );
-
-
-      const paid =
-        Math.min(
-          total,
-          Math.max(
-            0,
-            Number(
-              $('editPaid').value || 0
-            )
-          )
-        );
-
-
-      const {
-        error
-      } =
-        await SB()
-          .from('students')
-          .update({
-
-            name:
-              $('editName').value.trim(),
-
-            father_name:
-              $('editFather').value.trim(),
-
-            contact:
-              $('editContact').value.trim(),
-
-            email:
-              $('editEmail').value.trim() ||
-              null,
-
-            class_level:
-              $('editClass').value.trim(),
-
-            course:
-              $('editCourse').value,
-
-            total_fees:
-              total,
-
-            paid:
-              paid,
-
-            due_amount:
-              total - paid,
-
-            payment_status:
-              paid === total
-                ? 'Paid'
-                : paid > 0
-                  ? 'Partial'
-                  : 'Pending',
-
-            certificate_status:
-              $('editCert').value
-
-          })
-          .eq(
-            'id',
-            id
-          );
-
-
-      if (error) {
-
-        toast(
-          error.message
-        );
-
-      } else {
-
-        $('modal')
-          .classList.remove('open');
-
-        await refreshAll();
-
-        toast(
-          'Student updated'
-        );
-      }
-    };
-}
-
-
-/* =========================================================
    MODALS
    ========================================================= */
 
-if ($('closeModal')) {
+if ($("closeModal")) {
 
-  $('closeModal').onclick =
-    () =>
-      $('modal')
-        .classList.remove('open');
+  $("closeModal").onclick =
+    () => {
+
+      $("modal")
+        ?.classList
+        .remove("open");
+    };
 }
 
 
-if ($('cancelEdit')) {
+if ($("cancelEdit")) {
 
-  $('cancelEdit').onclick =
-    () =>
-      $('modal')
-        .classList.remove('open');
+  $("cancelEdit").onclick =
+    () => {
+
+      $("modal")
+        ?.classList
+        .remove("open");
+    };
 }
 
 
-if ($('closeCredential')) {
+if ($("closeCredential")) {
 
-  $('closeCredential').onclick =
-    () =>
-      $('credentialModal')
-        .classList.remove('open');
-}
+  $("closeCredential").onclick =
+    () => {
 
-
-/* =========================================================
-   COPY CREDENTIALS
-   ========================================================= */
-
-if ($('copyCredentials')) {
-
-  $('copyCredentials').onclick =
-    async () => {
-
-      if (!registrationResult) {
-        return;
-      }
-
-
-      await navigator
-        .clipboard
-        .writeText(
-
-          `TeraByte Student Portal
-Username: ${registrationResult.username}
-Temporary Password: ${registrationResult.temporary_password}
-Registration Number: ${registrationResult.admission_no}`
-
-        );
-
-
-      toast(
-        'Credentials copied'
-      );
+      $("credentialModal")
+        ?.classList
+        .remove("open");
     };
 }
 
 
 /* =========================================================
-   DOWNLOAD REGISTRATION
+   CREDENTIAL COPY
    ========================================================= */
 
-if ($('downloadRegistration')) {
+if ($("copyCredentials")) {
 
-  $('downloadRegistration').onclick =
+  $("copyCredentials").onclick =
     async () => {
 
       if (!registrationResult) {
@@ -2299,36 +2552,111 @@ if ($('downloadRegistration')) {
       }
 
 
-      const wrap =
-        document.createElement('div');
+      const text =
+
+`TeraByte Computer Academy
+
+Registration No: ${registrationResult.admission_no}
+Username: ${registrationResult.username}
+Temporary Password: ${registrationResult.temporary_password}`;
 
 
-      wrap.className =
-        'registration-sheet';
+      try {
+
+        await navigator
+          .clipboard
+          .writeText(text);
 
 
-      wrap.innerHTML = `
+        toast(
+          "Credentials copied"
+        );
 
-        <div class="sheet-head">
+      } catch {
 
-          <img src="logo.png">
+        toast(
+          "Could not copy credentials."
+        );
+      }
+    };
+}
 
-          <div>
 
-            <h1>
-              TeraByte Computer Academy
-            </h1>
+/* =========================================================
+   REGISTRATION DOWNLOAD
+   ========================================================= */
 
-            <p>
-              OFFICIAL STUDENT REGISTRATION RECORD
-            </p>
+if ($("downloadRegistration")) {
+
+  $("downloadRegistration").onclick =
+    async () => {
+
+      if (!registrationResult) {
+        return;
+      }
+
+
+      const wrapper =
+        document.createElement("div");
+
+
+      wrapper.style.position =
+        "fixed";
+
+      wrapper.style.left =
+        "-10000px";
+
+      wrapper.style.top =
+        "0";
+
+      wrapper.style.width =
+        "900px";
+
+      wrapper.style.background =
+        "#ffffff";
+
+      wrapper.style.padding =
+        "40px";
+
+
+      wrapper.innerHTML = `
+
+        <div>
+
+          <div
+            style="
+              display:flex;
+              align-items:center;
+              gap:20px;
+              border-bottom:2px solid #111;
+              padding-bottom:20px;
+              margin-bottom:25px;
+            "
+          >
+
+            <img
+              src="logo.png"
+              style="
+                width:90px;
+                height:90px;
+                object-fit:contain;
+              "
+            >
+
+            <div>
+
+              <h1>
+                TeraByte Computer Academy
+              </h1>
+
+              <p>
+                OFFICIAL STUDENT REGISTRATION RECORD
+              </p>
+
+            </div>
 
           </div>
 
-        </div>
-
-
-        <div class="sheet-body">
 
           <h2>
             ${esc(
@@ -2337,204 +2665,125 @@ if ($('downloadRegistration')) {
           </h2>
 
 
-          <div class="sheet-grid">
-
-            <p>
-              <span>
-                Admission No.
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.admission_no
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Registration Date
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.registration_date
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Father / Guardian
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.father_name
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Contact
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.contact
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Email
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.email ||
-                  'Not provided'
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Class
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.class_level ||
-                  '—'
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Course
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.course
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Batch
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.batch
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Duration
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.duration
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Total Fees
-              </span>
-
-              <strong>
-                ${money(
-                  registrationResult.total_fees
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Fees Paid
-              </span>
-
-              <strong>
-                ${money(
-                  registrationResult.paid
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Due Amount
-              </span>
-
-              <strong>
-                ${money(
-                  registrationResult.due_amount
-                )}
-              </strong>
-            </p>
-
-
-            <p>
-              <span>
-                Portal Username
-              </span>
-
-              <strong>
-                ${esc(
-                  registrationResult.username
-                )}
-              </strong>
-            </p>
-
-          </div>
-
-
-          <div class="address-block">
-
-            <span>
-              Address
-            </span>
-
+          <p>
             <strong>
-              ${esc(
-                registrationResult.address ||
-                'Not provided'
-              )}
+              Admission Number:
             </strong>
 
-          </div>
+            ${esc(
+              registrationResult.admission_no
+            )}
+          </p>
 
 
-          <div class="sheet-note">
+          <p>
+            <strong>
+              Registration Date:
+            </strong>
 
-            Keep the portal password confidential.
-            The temporary password is not printed
-            on this official record.
+            ${esc(
+              registrationResult.registration_date
+            )}
+          </p>
 
-          </div>
+
+          <p>
+            <strong>
+              Father's / Guardian Name:
+            </strong>
+
+            ${esc(
+              registrationResult.father_name
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Contact:
+            </strong>
+
+            ${esc(
+              registrationResult.contact
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Course:
+            </strong>
+
+            ${esc(
+              registrationResult.course
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Batch:
+            </strong>
+
+            ${esc(
+              registrationResult.batch
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Duration:
+            </strong>
+
+            ${esc(
+              registrationResult.duration
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Total Fees:
+            </strong>
+
+            ${money(
+              registrationResult.total_fees
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Fees Paid:
+            </strong>
+
+            ${money(
+              registrationResult.paid
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Due:
+            </strong>
+
+            ${money(
+              registrationResult.due_amount
+            )}
+          </p>
+
+
+          <p>
+            <strong>
+              Portal Username:
+            </strong>
+
+            ${esc(
+              registrationResult.username
+            )}
+          </p>
 
         </div>
 
@@ -2542,20 +2791,43 @@ if ($('downloadRegistration')) {
 
 
       document.body.appendChild(
-        wrap
+        wrapper
       );
 
 
-      await downloadElementJpg(
-        wrap,
+      const canvas =
+        await html2canvas(
+          wrapper,
+          {
+            scale: 2,
+            useCORS: true,
+            backgroundColor:
+              "#ffffff"
+          }
+        );
 
+
+      const link =
+        document.createElement("a");
+
+
+      link.download =
         `${
           registrationResult.admission_no
-        }_Registration.jpg`
-      );
+        }_Registration.jpg`;
 
 
-      wrap.remove();
+      link.href =
+        canvas.toDataURL(
+          "image/jpeg",
+          0.95
+        );
+
+
+      link.click();
+
+
+      wrapper.remove();
     };
 }
 
@@ -2564,29 +2836,34 @@ if ($('downloadRegistration')) {
    POSTS
    ========================================================= */
 
-if ($('postForm')) {
+if ($("postForm")) {
 
-  $('postForm').onsubmit =
-    async e => {
+  $("postForm").onsubmit =
+    async event => {
 
-      e.preventDefault();
+      event.preventDefault();
 
 
       const {
         error
       } =
         await SB()
-          .from('posts')
+          .from("posts")
           .insert({
 
             title:
-              $('postTitle').value.trim(),
+              $("postTitle")
+                .value
+                .trim(),
 
             content:
-              $('postContent').value.trim(),
+              $("postContent")
+                .value
+                .trim(),
 
             published:
-              $('postPublished').checked,
+              $("postPublished")
+                .checked,
 
             author_id:
               currentUser.id
@@ -2600,120 +2877,122 @@ if ($('postForm')) {
           error.message
         );
 
-      } else {
-
-        e.target.reset();
-
-        $('postPublished').checked =
-          true;
-
-        await refreshAll();
-
-        toast(
-          'Post published'
-        );
+        return;
       }
+
+
+      event.target.reset();
+
+      $("postPublished").checked =
+        true;
+
+
+      await refreshAll();
+
+      toast(
+        "Post published"
+      );
     };
 }
 
 
 function renderPosts() {
 
-  if (!$('postsList')) {
+  if (!$("postsList")) {
     return;
   }
 
 
-  $('postsList').innerHTML =
+  if (!posts.length) {
 
-    posts.length
+    $("postsList").innerHTML = `
 
-      ? posts.map(p => `
+      <div class="empty">
+        No posts yet.
+      </div>
 
-        <article
-          class="post-item"
-        >
+    `;
 
-          <div class="post-meta">
-
-            <span
-              class="badge ${
-                p.published
-                  ? 'paid'
-                  : 'pending'
-              }"
-            >
-              ${
-                p.published
-                  ? 'PUBLISHED'
-                  : 'DRAFT'
-              }
-            </span>
-
-            <span>
-              ${new Date(
-                p.created_at
-              ).toLocaleString(
-                'en-IN'
-              )}
-            </span>
-
-          </div>
+    return;
+  }
 
 
-          <h3>
-            ${esc(p.title)}
-          </h3>
+  $("postsList").innerHTML =
+    posts.map(post => `
 
+      <article
+        class="post-item"
+      >
 
-          <p>
-            ${esc(p.content)
-              .replace(
-                /\n/g,
-                '<br>'
-              )}
-          </p>
+        <div class="post-meta">
 
-
-          <button
-            class="btn ${
-              p.published
-                ? 'danger'
-                : 'primary'
-            }"
-            onclick="
-              togglePost(
-                '${p.id}',
-                ${!p.published}
-              )
-            "
-          >
+          <span>
             ${
-              p.published
-                ? 'Unpublish'
-                : 'Publish'
+              post.published
+                ? "PUBLISHED"
+                : "DRAFT"
             }
-          </button>
+          </span>
 
+          <span>
+            ${new Date(
+              post.created_at
+            ).toLocaleString(
+              "en-IN"
+            )}
+          </span>
 
-          <button
-            class="btn danger"
-            onclick="
-              deletePost('${p.id}')
-            "
-          >
-            Delete
-          </button>
-
-        </article>
-
-      `).join('')
-
-      : `
-        <div class="empty">
-          No posts yet.
         </div>
-      `;
+
+
+        <h3>
+          ${esc(
+            post.title
+          )}
+        </h3>
+
+
+        <p>
+          ${esc(
+            post.content
+          ).replace(
+            /\n/g,
+            "<br>"
+          )}
+        </p>
+
+
+        <button
+          class="btn primary"
+          onclick="
+            togglePost(
+              '${post.id}',
+              ${!post.published}
+            )
+          "
+        >
+          ${
+            post.published
+              ? "Unpublish"
+              : "Publish"
+          }
+        </button>
+
+
+        <button
+          class="btn danger"
+          onclick="
+            deletePost(
+              '${post.id}'
+            )
+          "
+        >
+          Delete
+        </button>
+
+      </article>
+
+    `).join("");
 }
 
 
@@ -2726,12 +3005,12 @@ async function togglePost(
     error
   } =
     await SB()
-      .from('posts')
+      .from("posts")
       .update({
         published
       })
       .eq(
-        'id',
+        "id",
         id
       );
 
@@ -2742,16 +3021,17 @@ async function togglePost(
       error.message
     );
 
-  } else {
-
-    await refreshAll();
-
-    toast(
-      published
-        ? 'Post published'
-        : 'Post unpublished'
-    );
+    return;
   }
+
+
+  await refreshAll();
+
+  toast(
+    published
+      ? "Post published"
+      : "Post unpublished"
+  );
 }
 
 
@@ -2759,7 +3039,7 @@ async function deletePost(id) {
 
   if (
     !confirm(
-      'Delete this post?'
+      "Delete this post?"
     )
   ) {
     return;
@@ -2770,10 +3050,10 @@ async function deletePost(id) {
     error
   } =
     await SB()
-      .from('posts')
+      .from("posts")
       .delete()
       .eq(
-        'id',
+        "id",
         id
       );
 
@@ -2784,14 +3064,15 @@ async function deletePost(id) {
       error.message
     );
 
-  } else {
-
-    await refreshAll();
-
-    toast(
-      'Post deleted'
-    );
+    return;
   }
+
+
+  await refreshAll();
+
+  toast(
+    "Post deleted"
+  );
 }
 
 
@@ -2808,45 +3089,46 @@ window.deletePost =
 
 function populateRecipients() {
 
-  if (!$('messageRecipient')) {
+  if (!$("messageRecipient")) {
     return;
   }
 
 
-  $('messageRecipient').innerHTML =
+  $("messageRecipient").innerHTML =
 
-    '<option value="all">All Students</option>' +
+    `<option value="all">
+      All Students
+    </option>` +
 
-    students.map(s => `
+    students.map(student => `
 
       <option
-        value="${s.user_id}"
+        value="${student.user_id}"
       >
-
-        ${esc(s.name)}
-
-        —
-
         ${esc(
-          s.admission_no || '—'
+          student.name
         )}
-
+        —
+        ${esc(
+          student.admission_no ||
+          "—"
+        )}
       </option>
 
-    `).join('');
+    `).join("");
 }
 
 
-if ($('messageForm')) {
+if ($("messageForm")) {
 
-  $('messageForm').onsubmit =
-    async e => {
+  $("messageForm").onsubmit =
+    async event => {
 
-      e.preventDefault();
+      event.preventDefault();
 
 
       const recipient =
-        $('messageRecipient')
+        $("messageRecipient")
           .value;
 
 
@@ -2854,21 +3136,23 @@ if ($('messageForm')) {
         error
       } =
         await SB()
-          .from('messages')
+          .from("messages")
           .insert({
 
             recipient_user_id:
-              recipient === 'all'
+              recipient === "all"
                 ? null
                 : recipient,
 
             subject:
-              $('messageSubject')
-                .value.trim(),
+              $("messageSubject")
+                .value
+                .trim(),
 
             body:
-              $('messageBody')
-                .value.trim(),
+              $("messageBody")
+                .value
+                .trim(),
 
             sender_id:
               currentUser.id
@@ -2882,86 +3166,89 @@ if ($('messageForm')) {
           error.message
         );
 
-      } else {
-
-        e.target.reset();
-
-        await refreshAll();
-
-        toast(
-          'Message sent'
-        );
+        return;
       }
+
+
+      event.target.reset();
+
+      await refreshAll();
+
+      toast(
+        "Message sent"
+      );
     };
 }
 
 
 function renderMessages() {
 
-  if (!$('messagesList')) {
+  if (!$("messagesList")) {
     return;
   }
 
 
-  $('messagesList').innerHTML =
+  if (!messages.length) {
 
-    messages.length
+    $("messagesList").innerHTML = `
 
-      ? messages.map(m => `
+      <div class="empty">
+        No messages sent yet.
+      </div>
 
-        <article
-          class="message-item"
-        >
+    `;
 
-          <div class="post-meta">
-
-            <span
-              class="badge ${
-                m.recipient_user_id
-                  ? 'partial'
-                  : 'active'
-              }"
-            >
-              ${
-                m.recipient_user_id
-                  ? 'PRIVATE'
-                  : 'ALL STUDENTS'
-              }
-            </span>
-
-            <span>
-              ${new Date(
-                m.created_at
-              ).toLocaleString(
-                'en-IN'
-              )}
-            </span>
-
-          </div>
+    return;
+  }
 
 
-          <h3>
-            ${esc(m.subject)}
-          </h3>
+  $("messagesList").innerHTML =
+    messages.map(message => `
 
+      <article
+        class="message-item"
+      >
 
-          <p>
-            ${esc(m.body)
-              .replace(
-                /\n/g,
-                '<br>'
-              )}
-          </p>
+        <div class="post-meta">
 
-        </article>
+          <span>
+            ${
+              message.recipient_user_id
+                ? "PRIVATE"
+                : "ALL STUDENTS"
+            }
+          </span>
 
-      `).join('')
+          <span>
+            ${new Date(
+              message.created_at
+            ).toLocaleString(
+              "en-IN"
+            )}
+          </span>
 
-      : `
-        <div class="empty">
-          No messages sent yet.
         </div>
-      `;
+
+
+        <h3>
+          ${esc(
+            message.subject
+          )}
+        </h3>
+
+
+        <p>
+          ${esc(
+            message.body
+          ).replace(
+            /\n/g,
+            "<br>"
+          )}
+        </p>
+
+      </article>
+
+    `).join("");
 }
 
 
@@ -2969,12 +3256,12 @@ function renderMessages() {
    START APPLICATION
    ========================================================= */
 
-(async () => {
+(async function startApplication() {
 
   try {
 
     /*
-      FIRST authenticate.
+      Authenticate first.
     */
 
     const authenticated =
@@ -2988,108 +3275,77 @@ function renderMessages() {
 
     /*
       IMPORTANT:
-      Generate registration number BEFORE
-      loading all the other database tables.
+      Generate registration number FIRST.
+
+      This happens before refreshAll().
     */
 
-    if ($('regDate')) {
+    if ($("regDate")) {
 
-      $('regDate').value =
+      $("regDate").value =
         new Date()
           .toISOString()
           .slice(0, 10);
     }
 
 
-    try {
-
-      const registrationNumber =
-        await nextAdmission();
-
-
-      if ($('admissionNo')) {
-
-        $('admissionNo').value =
-          registrationNumber;
-
-        console.log(
-          'Registration number:',
-          registrationNumber
-        );
-      }
-
-    } catch (numberError) {
-
-      console.error(
-        'Registration number error:',
-        numberError
-      );
-
-
-      /*
-        Even if Supabase has a problem,
-        display a temporary number instead
-        of leaving the box blank.
-      */
-
-      const fallback =
-        'TCA' +
-        Math.floor(
-          10000 +
-          Math.random() *
-          90000
-        );
-
-
-      if ($('admissionNo')) {
-
-        $('admissionNo').value =
-          fallback;
-      }
-
-
-      toast(
-        'Registration number generated locally'
-      );
-    }
+    await showNextAdmissionNumber();
 
 
     /*
-      Now load dashboard data.
-      An error here will NOT remove
-      the registration number.
+      Now load all other dashboard data.
     */
 
-    try {
+    await refreshAll();
 
-      await refreshAll();
 
-    } catch (refreshError) {
+    /*
+      Make sure the number wasn't lost.
+    */
 
-      console.error(
-        'Database refresh error:',
-        refreshError
-      );
+    if (
+      $("admissionNo") &&
+      !$("admissionNo").value
+    ) {
 
-      toast(
-        'Some dashboard data could not be loaded.'
-      );
+      await showNextAdmissionNumber();
     }
+
+
+    console.log(
+      "TeraByte Admin Portal initialized successfully."
+    );
 
 
   } catch (error) {
 
     console.error(
-      'Application initialization error:',
+      "Application startup error:",
       error
     );
 
 
+    /*
+      Even if some database operation fails,
+      try to display a registration number.
+    */
+
+    try {
+
+      await showNextAdmissionNumber();
+
+    } catch (numberError) {
+
+      console.error(
+        numberError
+      );
+    }
+
+
     toast(
       error.message ||
-      'Unable to connect to the database'
+      "Some dashboard data could not be loaded."
     );
-
   }
 
 })();
